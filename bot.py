@@ -461,13 +461,13 @@ async def product_select(update, context):
     keyboard = [
         [
             InlineKeyboardButton(
-                "🇧🇩 bKash",
+                " bKash",
                 callback_data="paymethod:bkash"
             )
         ],
         [
             InlineKeyboardButton(
-                "🟢 Nagad",
+                " Nagad",
                 callback_data="paymethod:nagad"
             )
         ],
