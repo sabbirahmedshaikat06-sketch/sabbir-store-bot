@@ -4,11 +4,7 @@ import random
 import asyncio
 from datetime import datetime, timedelta
 
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -113,7 +109,6 @@ def db():
 
 
 def init_db():
-
     con = db()
     cur = con.cursor()
 
@@ -208,7 +203,6 @@ def is_admin(user_id):
 
 
 def get_user(user_id):
-
     con = db()
     cur = con.cursor()
 
@@ -218,14 +212,12 @@ def get_user(user_id):
     )
 
     row = cur.fetchone()
-
     con.close()
 
     return row
 
 
 def ensure_user(tg_user, referral_by=None):
-
     con = db()
     cur = con.cursor()
 
@@ -276,7 +268,6 @@ def ensure_user(tg_user, referral_by=None):
 
 
 def is_verified(user_id):
-
     con = db()
     cur = con.cursor()
 
@@ -286,14 +277,12 @@ def is_verified(user_id):
     )
 
     row = cur.fetchone()
-
     con.close()
 
     return bool(row and row[0] == 1)
 
 
 def set_verified(user_id):
-
     con = db()
     cur = con.cursor()
 
@@ -307,7 +296,6 @@ def set_verified(user_id):
 
 
 def add_balance(user_id, amount):
-
     con = db()
     cur = con.cursor()
 
@@ -321,7 +309,6 @@ def add_balance(user_id, amount):
 
 
 def get_balance(user_id):
-
     con = db()
     cur = con.cursor()
 
@@ -331,90 +318,9 @@ def get_balance(user_id):
     )
 
     row = cur.fetchone()
-
     con.close()
 
     return row[0] if row else 0
-
-
-# =========================================================
-# MESSAGE CLEANER
-# =========================================================
-
-async def delete_old_messages(context, chat_id):
-
-    ids = context.user_data.get("bot_messages", [])
-
-    if not ids:
-        return
-
-    for message_id in ids:
-
-        try:
-            await context.bot.delete_message(
-                chat_id=chat_id,
-                message_id=message_id
-            )
-        except Exception:
-            pass
-
-    context.user_data["bot_messages"] = []
-
-
-async def save_message(context, message):
-
-    if not message:
-        return
-
-    ids = context.user_data.setdefault(
-        "bot_messages",
-        []
-    )
-
-    ids.append(message.message_id)
-
-    # বেশি পুরোনো message জমতে না দেওয়া
-    if len(ids) > 20:
-
-        old_ids = ids[:-20]
-
-        for message_id in old_ids:
-
-            try:
-                await context.bot.delete_message(
-                    chat_id=message.chat_id,
-                    message_id=message_id
-                )
-            except Exception:
-                pass
-
-        context.user_data["bot_messages"] = ids[-20:]
-
-
-async def send_clean_message(
-    context,
-    chat_id,
-    text,
-    reply_markup=None
-):
-
-    await delete_old_messages(
-        context,
-        chat_id
-    )
-
-    message = await context.bot.send_message(
-        chat_id=chat_id,
-        text=text,
-        reply_markup=reply_markup
-    )
-
-    await save_message(
-        context,
-        message
-    )
-
-    return message
 
 
 # =========================================================
@@ -457,7 +363,7 @@ def main_menu():
         [
             InlineKeyboardButton(
                 "🎰 Lucky Spin",
-                callback_data="spin"
+                callback_data="spin_menu"
             )
         ],
 
@@ -465,13 +371,6 @@ def main_menu():
             InlineKeyboardButton(
                 "📁 Download Files",
                 callback_data="downloads"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "📺 Tutorials",
-                callback_data="tutorials"
             )
         ],
 
@@ -485,84 +384,27 @@ def main_menu():
 
 
 # =========================================================
-# BACK BUTTONS
-# =========================================================
-
-def back_home():
-
-    return InlineKeyboardMarkup([
-
-        [
-            InlineKeyboardButton(
-                "🔙 Back",
-                callback_data="home"
-            )
-        ]
-
-    ])
-
-
-def back_and_home(back_callback="home"):
-
-    if back_callback == "home":
-
-        return InlineKeyboardMarkup([
-
-            [
-                InlineKeyboardButton(
-                    "🔙 Back",
-                    callback_data="home"
-                )
-            ]
-
-        ])
-
-    return InlineKeyboardMarkup([
-
-        [
-            InlineKeyboardButton(
-                "🔙 Back",
-                callback_data=back_callback
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🏠 Menu",
-                callback_data="home"
-            )
-        ]
-
-    ])
-
-
-# =========================================================
 # VERIFY
 # =========================================================
 
 def verify_menu():
 
     return InlineKeyboardMarkup([
-
         [
             InlineKeyboardButton(
                 "✅ VERIFY ACCOUNT",
                 callback_data="verify_account"
             )
         ]
-
     ])
 
 
 async def verify_account(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
-    set_verified(
-        query.from_user.id
-    )
+    set_verified(query.from_user.id)
 
     await query.edit_message_text(
         f"""
@@ -586,12 +428,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
 
-    # /start দিলে আগের bot message delete
-    await delete_old_messages(
-        context,
-        update.effective_chat.id
-    )
-
     referral_by = None
 
     if context.args:
@@ -612,14 +448,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 pass
 
-    ensure_user(
-        user,
-        referral_by
-    )
+    ensure_user(user, referral_by)
 
     if not is_verified(user.id):
 
-        message = await update.message.reply_text(
+        await update.message.reply_text(
             f"""
 🏪 — {SHOP_NAME} —
 
@@ -629,8 +462,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 │ 🔑 Premium Game Keys
 │ ⚡ Instant Delivery 24/7
-│ 🔒 Secure Payment
-│ 💰 Best Prices
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
 │ 🎁 Referral Rewards
 │ 📞 Professional Support
 
@@ -646,14 +479,9 @@ verify করুন।
             reply_markup=verify_menu()
         )
 
-        await save_message(
-            context,
-            message
-        )
-
         return
 
-    message = await update.message.reply_text(
+    await update.message.reply_text(
         f"""
 🏪 — {SHOP_NAME} —
 
@@ -663,8 +491,8 @@ verify করুন।
 
 │ 🔑 Premium Game Keys
 │ ⚡ Instant Delivery 24/7
-│ 🔒 Secure Payment
-│ 💰 Best Prices
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
 │ 🎁 Referral Rewards
 │ 📞 Professional Support
 
@@ -675,11 +503,6 @@ verify করুন।
         reply_markup=main_menu()
     )
 
-    await save_message(
-        context,
-        message
-    )
-
 
 # =========================================================
 # HOME
@@ -688,7 +511,6 @@ verify করুন।
 async def home(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     await query.edit_message_text(
@@ -702,8 +524,8 @@ async def home(update, context):
 
 │ 🔑 Premium Game Keys
 │ ⚡ Instant Delivery 24/7
-│ 🔒 Secure Payment
-│ 💰 Best Prices
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
 │ 🎁 Referral Rewards
 │ 📞 Professional Support
 
@@ -722,14 +544,20 @@ async def home(update, context):
 async def shop(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     if not is_verified(query.from_user.id):
 
-        await query.answer(
+        await query.edit_message_text(
             "❌ আগে Account Verify করুন।",
-            show_alert=True
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="home"
+                    )
+                ]
+            ])
         )
 
         return
@@ -791,7 +619,6 @@ async def shop(update, context):
                 callback_data="home"
             )
         ]
-
     ]
 
     await query.edit_message_text(
@@ -802,20 +629,17 @@ async def shop(update, context):
 
 যে product নিতে চান সেটাতে click করুন।
 """,
-        reply_markup=InlineKeyboardMarkup(
-            keyboard
-        )
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 # =========================================================
-# SABBIR MODE PRO
+# SABBIR MODE PRO PRICE LIST
 # =========================================================
 
 async def sabbir_pro_menu(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     con = db()
@@ -843,7 +667,7 @@ async def sabbir_pro_menu(update, context):
         if count <= 0:
             return "❌ Out of Stock", "❌"
 
-        return f"✅ {count}", "✅"
+        return "✅ In Stock", "✅"
 
     stock_7, icon_7 = stock_display(7)
     stock_15, icon_15 = stock_display(15)
@@ -904,18 +728,15 @@ async def sabbir_pro_menu(update, context):
 
         [
             InlineKeyboardButton(
-                "🔙 Back",
+                "🔙 Back to Shop",
                 callback_data="shop"
             )
         ]
-
     ]
 
     await query.edit_message_text(
         text,
-        reply_markup=InlineKeyboardMarkup(
-            keyboard
-        )
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -926,7 +747,6 @@ async def sabbir_pro_menu(update, context):
 async def product_select(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     key = query.data.split(":", 1)[1]
@@ -935,9 +755,16 @@ async def product_select(update, context):
 
     if not product:
 
-        await query.answer(
+        await query.edit_message_text(
             "❌ Product পাওয়া যায়নি।",
-            show_alert=True
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="shop"
+                    )
+                ]
+            ])
         )
 
         return
@@ -960,9 +787,8 @@ async def product_select(update, context):
         count = cur.fetchone()[0]
 
         if count > 0:
-
             stock_available = True
-            stock_text = f"✅ {count} Available"
+            stock_text = "✅ In Stock"
 
     else:
 
@@ -975,7 +801,6 @@ async def product_select(update, context):
         row = cur.fetchone()
 
         if row:
-
             stock_available = True
             stock_text = "✅ In Stock"
 
@@ -1004,16 +829,19 @@ async def product_select(update, context):
 
 দুঃখিত, এই product এখন available নেই।
 """,
-            reply_markup=back_and_home(
-                back_callback
-            )
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data=back_callback
+                    )
+                ]
+            ])
         )
 
         return
 
-    context.user_data[
-        "selected_product"
-    ] = key
+    context.user_data["selected_product"] = key
 
     await query.edit_message_text(
         f"""
@@ -1056,15 +884,7 @@ async def product_select(update, context):
                     "🔙 Back",
                     callback_data=back_callback
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
     )
 
@@ -1076,7 +896,6 @@ async def product_select(update, context):
 async def payment_method(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     method = query.data.split(":")[1]
@@ -1106,13 +925,8 @@ async def payment_method(update, context):
         number = NAGAD
         name = "Nagad"
 
-    context.user_data[
-        "payment_method"
-    ] = method
-
-    context.user_data[
-        "waiting_tx"
-    ] = False
+    context.user_data["payment_method"] = method
+    context.user_data["waiting_tx"] = False
 
     await query.edit_message_text(
         f"""
@@ -1156,11 +970,10 @@ click করে Transaction ID পাঠান।
 
             [
                 InlineKeyboardButton(
-                    "🏠 Menu",
+                    "🏠 Home",
                     callback_data="home"
                 )
             ]
-
         ])
     )
 
@@ -1172,12 +985,9 @@ click করে Transaction ID পাঠান।
 async def send_tx(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
-    context.user_data[
-        "waiting_tx"
-    ] = True
+    context.user_data["waiting_tx"] = True
 
     await query.edit_message_text(
         """
@@ -1188,11 +998,15 @@ async def send_tx(update, context):
 উদাহরণ:
 
 TX123456789
-
-━━━━━━━━━━━━━━━━
-
-🔙 Cancel করতে /start চাপুন।
-"""
+""",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ])
     )
 
 
@@ -1203,7 +1017,6 @@ TX123456789
 async def add_balance_menu(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     await query.edit_message_text(
@@ -1258,7 +1071,6 @@ async def add_balance_menu(update, context):
                     callback_data="home"
                 )
             ]
-
         ])
     )
 
@@ -1266,16 +1078,13 @@ async def add_balance_menu(update, context):
 async def balance_fixed_amount(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     amount = float(
         query.data.split(":")[1]
     )
 
-    context.user_data[
-        "balance_amount"
-    ] = amount
+    context.user_data["balance_amount"] = amount
 
     await show_balance_payment(
         query,
@@ -1287,12 +1096,9 @@ async def balance_fixed_amount(update, context):
 async def custom_balance(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
-    context.user_data[
-        "waiting_balance_amount"
-    ] = True
+    context.user_data["waiting_balance_amount"] = True
 
     await query.edit_message_text(
         """
@@ -1309,30 +1115,17 @@ async def custom_balance(update, context):
 শুধু amount লিখে পাঠান।
 """,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "🔙 Back",
                     callback_data="add_balance"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
     )
 
 
-async def show_balance_payment(
-    query,
-    context,
-    amount
-):
+async def show_balance_payment(query, context, amount):
 
     await query.edit_message_text(
         f"""
@@ -1367,23 +1160,12 @@ async def show_balance_payment(
                     "🔙 Back",
                     callback_data="add_balance"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
     )
 
 
-async def handle_balance_amount(
-    update,
-    context
-):
+async def handle_balance_amount(update, context):
 
     if not context.user_data.get(
         "waiting_balance_amount"
@@ -1415,7 +1197,7 @@ async def handle_balance_amount(
         "balance_amount"
     ] = amount
 
-    message = await update.message.reply_text(
+    await update.message.reply_text(
         f"""
 💰 — ADD BALANCE —
 
@@ -1445,21 +1227,8 @@ async def handle_balance_amount(
                     "🔙 Back",
                     callback_data="add_balance"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
-    )
-
-    await save_message(
-        context,
-        message
     )
 
     return True
@@ -1472,7 +1241,6 @@ async def handle_balance_amount(
 async def balance_payment(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     method = query.data.split(":")[1]
@@ -1530,29 +1298,17 @@ async def balance_payment(update, context):
 Transaction ID লিখে পাঠান।
 """,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "🔙 Back",
                     callback_data="add_balance"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
     )
 
 
-async def balance_transaction(
-    update,
-    context
-):
+async def balance_transaction(update, context):
 
     if not context.user_data.get(
         "waiting_balance_tx"
@@ -1603,7 +1359,7 @@ async def balance_transaction(
     con.commit()
     con.close()
 
-    message = await update.message.reply_text(
+    await update.message.reply_text(
         f"""
 ✅ BALANCE REQUEST SUBMITTED
 
@@ -1619,11 +1375,6 @@ async def balance_transaction(
 ⏳ Admin verification pending.
 """,
         reply_markup=main_menu()
-    )
-
-    await save_message(
-        context,
-        message
     )
 
     await context.bot.send_message(
@@ -1650,7 +1401,6 @@ async def balance_transaction(
 {tx_text}
 """,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "✅ ACCEPT",
@@ -1661,7 +1411,6 @@ async def balance_transaction(
                     callback_data=f"reject_balance:{tx_id}"
                 )
             ]
-
         ])
     )
 
@@ -1675,7 +1424,6 @@ async def balance_transaction(
 async def profile(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     user = get_user(
@@ -1775,7 +1523,6 @@ https://t.me/{bot_username}?start=ref_{user_id}
                     callback_data="home"
                 )
             ]
-
         ])
     )
 
@@ -1787,7 +1534,6 @@ https://t.me/{bot_username}?start=ref_{user_id}
 async def orders(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     con = db()
@@ -1804,7 +1550,9 @@ async def orders(update, context):
     WHERE user_id=?
     ORDER BY id DESC
     LIMIT 10
-    """, (query.from_user.id,))
+    """, (
+        query.from_user.id,
+    ))
 
     rows = cur.fetchall()
 
@@ -1835,7 +1583,14 @@ No orders yet.
 
     await query.edit_message_text(
         text,
-        reply_markup=back_home()
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ])
     )
 
 
@@ -1846,7 +1601,6 @@ No orders yet.
 async def referral(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     user_id = query.from_user.id
@@ -1890,10 +1644,70 @@ Friend আপনার link দিয়ে join করলে
 referral হিসেবে save হবে।
 """,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "💰 View Balance",
+                    callback_data="profile"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ])
+    )
+
+
+# =========================================================
+# LUCKY SPIN MENU
+# =========================================================
+
+async def spin_menu(update, context):
+
+    query = update.callback_query
+    await query.answer()
+
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
+
+    con = db()
+    cur = con.cursor()
+
+    cur.execute("""
+    SELECT result
+    FROM spins
+    WHERE user_id=?
+    AND spin_date=?
+    """, (
+        query.from_user.id,
+        today
+    ))
+
+    already = cur.fetchone()
+
+    con.close()
+
+    if already:
+
+        text = f"""
+🎰 — LUCKY SPIN —
+
+🎁 আজকের Spin already ব্যবহার করেছেন।
+
+💰 Today's Result:
+৳{already[0]}
+
+🕐 Tomorrow আবার try করুন।
+"""
+
+        keyboard = [
+
+            [
+                InlineKeyboardButton(
+                    "💰 Profile",
                     callback_data="profile"
                 )
             ],
@@ -1904,8 +1718,47 @@ referral হিসেবে save হবে।
                     callback_data="home"
                 )
             ]
+        ]
 
-        ])
+    else:
+
+        text = """
+🎰 — LUCKY SPIN —
+
+━━━━━━━━━━━━━━━━━━━━
+
+🎁 প্রতিদিন ১ বার Lucky Spin করতে পারবেন।
+
+💰 Possible Prize:
+৳0 - ৳15
+
+━━━━━━━━━━━━━━━━━━━━
+
+👇 Spin করতে নিচের button-এ click করুন।
+"""
+
+        keyboard = [
+
+            [
+                InlineKeyboardButton(
+                    "🎰 SPIN NOW",
+                    callback_data="spin"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ]
+
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
     )
 
 
@@ -1916,7 +1769,6 @@ referral হিসেবে save হবে।
 async def lucky_spin(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     today = datetime.now().strftime(
@@ -1949,11 +1801,18 @@ async def lucky_spin(update, context):
 আজকে already spin করেছেন।
 
 🎁 Result:
-{already[0]} Tk
+৳{already[0]}
 
 🕐 Tomorrow আবার try করুন।
 """,
-            reply_markup=back_home()
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="home"
+                    )
+                ]
+            ])
         )
 
         return
@@ -1961,6 +1820,8 @@ async def lucky_spin(update, context):
     await query.edit_message_text(
         """
 🎰 — LUCKY SPIN —
+
+━━━━━━━━━━━━━━━━
 
 🎡 Spinning...
 
@@ -2047,7 +1908,6 @@ Tomorrow
                     callback_data="home"
                 )
             ]
-
         ])
     )
 
@@ -2059,7 +1919,6 @@ Tomorrow
 async def downloads(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     con = db()
@@ -2070,7 +1929,9 @@ async def downloads(update, context):
     FROM orders
     WHERE user_id=?
     AND status='accepted'
-    """, (query.from_user.id,))
+    """, (
+        query.from_user.id,
+    ))
 
     rows = cur.fetchall()
 
@@ -2082,26 +1943,24 @@ async def downloads(update, context):
 
         key = row[0]
 
-        product = PRODUCTS.get(key)
+        product = PRODUCTS.get(
+            key
+        )
 
         if product and product["type"] == "file":
 
             keyboard.append([
-
                 InlineKeyboardButton(
                     f"📁 {product['name']}",
                     callback_data=f"download:{key}"
                 )
-
             ])
 
     keyboard.append([
-
         InlineKeyboardButton(
             "🔙 Back",
             callback_data="home"
         )
-
     ])
 
     await query.edit_message_text(
@@ -2119,7 +1978,6 @@ async def downloads(update, context):
 async def download_file(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     key = query.data.split(
@@ -2150,7 +2008,9 @@ async def download_file(update, context):
     purchased = cur.fetchone()
 
     cur.execute("""
-    SELECT telegram_file_id,file_name
+    SELECT
+        telegram_file_id,
+        file_name
     FROM files
     WHERE file_key=?
     """, (
@@ -2163,18 +2023,16 @@ async def download_file(update, context):
 
     if not purchased:
 
-        await query.answer(
-            "❌ এই product আপনি purchase করেননি।",
-            show_alert=True
+        await query.message.reply_text(
+            "❌ এই product আপনি purchase করেননি।"
         )
 
         return
 
     if not file_row:
 
-        await query.answer(
-            "❌ File এখন available নেই।",
-            show_alert=True
+        await query.message.reply_text(
+            "❌ File এখন available নেই।"
         )
 
         return
@@ -2198,7 +2056,6 @@ File:
 async def transactions(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     con = db()
@@ -2215,7 +2072,9 @@ async def transactions(update, context):
     WHERE user_id=?
     ORDER BY id DESC
     LIMIT 10
-    """, (query.from_user.id,))
+    """, (
+        query.from_user.id,
+    ))
 
     rows = cur.fetchall()
 
@@ -2247,21 +2106,12 @@ No transactions yet.
     await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "🔙 Back",
                     callback_data="profile"
                 )
-            ],
-
-            [
-                InlineKeyboardButton(
-                    "🏠 Menu",
-                    callback_data="home"
-                )
             ]
-
         ])
     )
 
@@ -2273,10 +2123,11 @@ No transactions yet.
 async def order_action(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
-    if not is_admin(query.from_user.id):
+    if not is_admin(
+        query.from_user.id
+    ):
         return
 
     action, order_id = query.data.split(
@@ -2328,7 +2179,9 @@ async def order_action(update, context):
         con.close()
         return
 
+    # =====================================================
     # REJECT
+    # =====================================================
 
     if action == "reject_order":
 
@@ -2362,7 +2215,9 @@ async def order_action(update, context):
 
         return
 
-    # CREDENTIAL
+    # =====================================================
+    # CREDENTIAL DELIVERY
+    # =====================================================
 
     if product["type"] == "credential":
 
@@ -2467,7 +2322,9 @@ ACCEPTED & DELIVERED
 
         return
 
-    # FILE
+    # =====================================================
+    # FILE DELIVERY
+    # =====================================================
 
     file_key = product["file_key"]
 
@@ -2542,10 +2399,11 @@ ACCEPTED & DELIVERED
 async def balance_action(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
-    if not is_admin(query.from_user.id):
+    if not is_admin(
+        query.from_user.id
+    ):
         return
 
     action, txid = query.data.split(
@@ -2664,7 +2522,6 @@ async def balance_action(update, context):
 async def support(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     await query.edit_message_text(
@@ -2676,34 +2533,14 @@ async def support(update, context):
 👤 Support:
 {SUPPORT}
 """,
-        reply_markup=back_home()
-    )
-
-
-# =========================================================
-# TUTORIALS
-# =========================================================
-
-async def tutorials(update, context):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    await query.edit_message_text(
-        """
-📺 — VIDEO TUTORIALS —
-
-├ 📱 Setup Guide
-├ ⚙️ Installation Help
-├ 🎮 Product Guide
-└ 💡 Tips & Tricks
-
-━━━━━━━━━━━━━━━━
-
-Tutorial videos can be added later.
-""",
-        reply_markup=back_home()
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ])
     )
 
 
@@ -2794,7 +2631,6 @@ async def admin(update, context):
                 callback_data="admin:stats"
             )
         ]
-
     ]
 
     await update.message.reply_text(
@@ -2818,7 +2654,6 @@ Welcome Admin.
 async def admin_callback(update, context):
 
     query = update.callback_query
-
     await query.answer()
 
     if not is_admin(
@@ -2836,9 +2671,11 @@ async def admin_callback(update, context):
 
         context.user_data[
             "admin_action"
-        ] = f"add_credential:{duration}"
+        ] = (
+            f"add_credential:{duration}"
+        )
 
-        await query.message.reply_text(
+        await query.edit_message_text(
             f"""
 🔑 ADD USER/PASSWORD
 
@@ -2852,7 +2689,15 @@ username | password
 Example:
 
 SABBIR123 | pass123
-"""
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="admin_back"
+                    )
+                ]
+            ])
         )
 
         return
@@ -2865,9 +2710,11 @@ SABBIR123 | pass123
 
         context.user_data[
             "admin_action"
-        ] = f"file:{file_key}"
+        ] = (
+            f"file:{file_key}"
+        )
 
-        await query.message.reply_text(
+        await query.edit_message_text(
             f"""
 📁 ADD FILE
 
@@ -2876,7 +2723,15 @@ Product:
 
 এখন Telegram document হিসেবে
 file পাঠান।
-"""
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="admin_back"
+                    )
+                ]
+            ])
         )
 
         return
@@ -2918,7 +2773,7 @@ file পাঠান।
 
         con.close()
 
-        await query.message.reply_text(
+        await query.edit_message_text(
             f"""
 📊 — ADMIN STATS —
 
@@ -2933,18 +2788,124 @@ file পাঠান।
 
 💰 Pending Balance:
 {pending_balance}
-"""
+""",
+            reply_markup=InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton(
+                        "🔙 Back",
+                        callback_data="admin_back"
+                    )
+                ]
+            ])
         )
+
+
+# =========================================================
+# ADMIN BACK
+# =========================================================
+
+async def admin_back(update, context):
+
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data.pop(
+        "admin_action",
+        None
+    )
+
+    keyboard = [
+
+        [
+            InlineKeyboardButton(
+                "🔑 ADD USER/PASS - 7 DAY",
+                callback_data="admin:add_credential:7"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "🔑 ADD USER/PASS - 15 DAY",
+                callback_data="admin:add_credential:15"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "🔑 ADD USER/PASS - 30 DAY",
+                callback_data="admin:add_credential:30"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD BR CS FILE",
+                callback_data="admin:file:br_cs"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD PEST FILE 🩵",
+                callback_data="admin:file:pest"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD PINK FILE 💜",
+                callback_data="admin:file:pink"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD YELLOW FILE 💛",
+                callback_data="admin:file:yellow"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD BLUE FILE 💙",
+                callback_data="admin:file:blue"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📁 ADD GREEN FILE 💚",
+                callback_data="admin:file:green"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "📊 ADMIN STATS",
+                callback_data="admin:stats"
+            )
+        ]
+    ]
+
+    await query.edit_message_text(
+        """
+👑 — ADMIN PANEL —
+
+Welcome Admin.
+
+নিচের options থেকে কাজ নির্বাচন করুন:
+""",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
 
 
 # =========================================================
 # ADMIN MESSAGE
 # =========================================================
 
-async def admin_message_handler(
-    update,
-    context
-):
+async def admin_message_handler(update, context):
 
     if not update.message:
         return
@@ -2962,7 +2923,6 @@ async def admin_message_handler(
         return
 
     # FILE
-
     if action.startswith("file:"):
 
         if not update.message.document:
@@ -3022,7 +2982,6 @@ async def admin_message_handler(
         return
 
     # CREDENTIAL
-
     if action.startswith(
         "add_credential:"
     ):
@@ -3101,10 +3060,7 @@ username | password
 # DOCUMENT ROUTER
 # =========================================================
 
-async def document_router(
-    update,
-    context
-):
+async def document_router(update, context):
 
     if is_admin(
         update.effective_user.id
@@ -3120,24 +3076,18 @@ async def document_router(
 # TEXT HANDLER
 # =========================================================
 
-async def text_handler(
-    update,
-    context
-):
+async def text_handler(update, context):
 
-    if not update.message:
-        return
-
-    if not update.message.text:
+    if not update.message or not update.message.text:
         return
 
     user = update.effective_user
+
     text = update.message.text.strip()
 
     ensure_user(user)
 
-    # ADMIN
-
+    # Admin
     if is_admin(user.id):
 
         if context.user_data.get(
@@ -3151,24 +3101,21 @@ async def text_handler(
 
             return
 
-    # CUSTOM BALANCE
-
+    # Custom balance
     if await handle_balance_amount(
         update,
         context
     ):
         return
 
-    # BALANCE TRANSACTION
-
+    # Balance transaction
     if await balance_transaction(
         update,
         context
     ):
         return
 
-    # PRODUCT TRANSACTION
-
+    # Product transaction
     if context.user_data.get(
         "waiting_tx"
     ):
@@ -3187,14 +3134,9 @@ async def text_handler(
 
         if not product_key or not method:
 
-            message = await update.message.reply_text(
+            await update.message.reply_text(
                 "❌ Payment session expired.",
                 reply_markup=main_menu()
-            )
-
-            await save_message(
-                context,
-                message
             )
 
             return
@@ -3205,18 +3147,14 @@ async def text_handler(
 
         if not product:
 
-            message = await update.message.reply_text(
+            await update.message.reply_text(
                 "❌ Product পাওয়া যায়নি.",
                 reply_markup=main_menu()
             )
 
-            await save_message(
-                context,
-                message
-            )
-
             return
 
+        # Stock re-check
         con = db()
         cur = con.cursor()
 
@@ -3253,18 +3191,14 @@ async def text_handler(
 
             con.close()
 
-            message = await update.message.reply_text(
+            await update.message.reply_text(
                 "❌ দুঃখিত, এই product এখন Out of Stock।",
                 reply_markup=main_menu()
             )
 
-            await save_message(
-                context,
-                message
-            )
-
             return
 
+        # Create order
         cur.execute("""
         INSERT INTO orders
         (
@@ -3294,7 +3228,7 @@ async def text_handler(
         con.commit()
         con.close()
 
-        message = await update.message.reply_text(
+        await update.message.reply_text(
             f"""
 ✅ PAYMENT SUBMITTED
 
@@ -3310,20 +3244,13 @@ async def text_handler(
 💳 Payment:
 {method}
 
-🧾 Transaction:
-{text}
-
 ⏳ Status:
 PENDING
 """,
             reply_markup=main_menu()
         )
 
-        await save_message(
-            context,
-            message
-        )
-
+        # Admin notification
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=f"""
@@ -3354,19 +3281,16 @@ PENDING
 {now_str()}
 """,
             reply_markup=InlineKeyboardMarkup([
-
                 [
                     InlineKeyboardButton(
                         "✅ ACCEPT",
                         callback_data=f"accept_order:{order_id}"
                     ),
-
                     InlineKeyboardButton(
                         "❌ REJECT",
                         callback_data=f"reject_order:{order_id}"
                     )
                 ]
-
             ])
         )
 
@@ -3444,15 +3368,8 @@ def main():
         )
     )
 
-    app.add_handler(
-        CallbackQueryHandler(
-            sabbir_pro_menu,
-            pattern="^sabbir_pro_menu$"
-        )
-    )
-
     # =====================================================
-    # PROFILE / ORDERS / ETC
+    # PROFILE
     # =====================================================
 
     app.add_handler(
@@ -3462,12 +3379,20 @@ def main():
         )
     )
 
+    # =====================================================
+    # ORDERS
+    # =====================================================
+
     app.add_handler(
         CallbackQueryHandler(
             orders,
             pattern="^orders$"
         )
     )
+
+    # =====================================================
+    # REFERRAL
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
@@ -3476,12 +3401,31 @@ def main():
         )
     )
 
+    # =====================================================
+    # LUCKY SPIN MENU
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            spin_menu,
+            pattern="^spin_menu$"
+        )
+    )
+
+    # =====================================================
+    # LUCKY SPIN
+    # =====================================================
+
     app.add_handler(
         CallbackQueryHandler(
             lucky_spin,
             pattern="^spin$"
         )
     )
+
+    # =====================================================
+    # DOWNLOADS
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
@@ -3490,6 +3434,10 @@ def main():
         )
     )
 
+    # =====================================================
+    # TRANSACTIONS
+    # =====================================================
+
     app.add_handler(
         CallbackQueryHandler(
             transactions,
@@ -3497,12 +3445,9 @@ def main():
         )
     )
 
-    app.add_handler(
-        CallbackQueryHandler(
-            tutorials,
-            pattern="^tutorials$"
-        )
-    )
+    # =====================================================
+    # SUPPORT
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
@@ -3544,6 +3489,17 @@ def main():
     )
 
     # =====================================================
+    # SABBIR MODE PRO
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            sabbir_pro_menu,
+            pattern="^sabbir_pro_menu$"
+        )
+    )
+
+    # =====================================================
     # PRODUCTS
     # =====================================================
 
@@ -3580,7 +3536,7 @@ def main():
     )
 
     # =====================================================
-    # ORDERS
+    # ORDERS ACTION
     # =====================================================
 
     app.add_handler(
@@ -3612,8 +3568,15 @@ def main():
         )
     )
 
+    app.add_handler(
+        CallbackQueryHandler(
+            admin_back,
+            pattern="^admin_back$"
+        )
+    )
+
     # =====================================================
-    # DOCUMENT
+    # DOCUMENTS
     # =====================================================
 
     app.add_handler(
