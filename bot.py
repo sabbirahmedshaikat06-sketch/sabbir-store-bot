@@ -1160,9 +1160,10 @@ async def add_balance_menu_message(update, context):
             ],
 
             [
-                InlineKeyboardButton(
-                    "✏️ Custom Amount",
-                    callback_data="bal_custom"
+                1163    InlineKeyboardButton(
+        "✏️ Custom Amount",
+        callback_data="bal_custom"
+    ),
                 ]
             ],
 
