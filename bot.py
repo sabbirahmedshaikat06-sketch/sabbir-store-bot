@@ -23,7 +23,7 @@ from telegram.ext import (
 # CONFIG
 # =========================================================
 
-BOT_TOKEN = os.getenv("8582373095:AAGeQvHEQm4sGNqhWx013MFNdIxFBTZUWCc")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8752830051"))
 
 SHOP_NAME = "SABBIR MODZ SHOP"
