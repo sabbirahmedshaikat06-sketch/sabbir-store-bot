@@ -1,6 +1,9 @@
 name: SABBIR MODZ SHOP
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
