@@ -1,12 +1,27 @@
-import os, sqlite3, random, asyncio
+import os
+import sqlite3
+import random
+import asyncio
 from datetime import datetime, timedelta
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters,
+)
+
+# =========================================================
+# CONFIG
+# =========================================================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "8752830051"))
 
-SHOP_NAME = "SABBIR MODS SHOP"
+SHOP_NAME = "SABBIR MODZ SHOP"
 SUPPORT = "@sabbirahmed187"
 
 BKASH = "01755196906"
@@ -24,64 +39,64 @@ PRODUCTS = {
         "name": "SABBIR MODE PRO APK - 7 DAY",
         "price": 40,
         "type": "credential",
-        "duration": 7
+        "duration": 7,
     },
 
     "sabbir_pro_15": {
         "name": "SABBIR MODE PRO APK - 15 DAY",
         "price": 80,
         "type": "credential",
-        "duration": 15
+        "duration": 15,
     },
 
     "sabbir_pro_30": {
         "name": "SABBIR MODE PRO APK - 30 DAY",
         "price": 120,
         "type": "credential",
-        "duration": 30
+        "duration": 30,
     },
 
     "br_cs": {
         "name": "BR CS + TOURNAMENT LOCATION",
         "price": 250,
         "type": "file",
-        "file_key": "br_cs"
+        "file_key": "br_cs",
     },
 
     "pest": {
         "name": "PEST TOURNAMENT LOCATION 🩵",
         "price": 180,
         "type": "file",
-        "file_key": "pest"
+        "file_key": "pest",
     },
 
     "pink": {
         "name": "PINK TOURNAMENT LOCATION 💜",
         "price": 180,
         "type": "file",
-        "file_key": "pink"
+        "file_key": "pink",
     },
 
     "yellow": {
         "name": "YELLOW TOURNAMENT LOCATION 💛",
         "price": 180,
         "type": "file",
-        "file_key": "yellow"
+        "file_key": "yellow",
     },
 
     "blue": {
         "name": "BLUE TOURNAMENT LOCATION 💙",
         "price": 180,
         "type": "file",
-        "file_key": "blue"
+        "file_key": "blue",
     },
 
     "green": {
         "name": "GREEN TOURNAMENT LOCATION 💚",
         "price": 180,
         "type": "file",
-        "file_key": "green"
-    }
+        "file_key": "green",
+    },
 }
 
 
@@ -93,21 +108,12 @@ def db():
     return sqlite3.connect(DB_FILE)
 
 
-def now():
-    return datetime.now()
-
-
-def now_str():
-    return now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def init_db():
-
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS users (
         user_id INTEGER PRIMARY KEY,
         name TEXT,
         username TEXT,
@@ -119,15 +125,8 @@ def init_db():
     )
     """)
 
-    try:
-        c.execute(
-            "ALTER TABLE users ADD COLUMN verified INTEGER DEFAULT 0"
-        )
-    except sqlite3.OperationalError:
-        pass
-
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS credentials(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS credentials (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,
         password TEXT,
@@ -139,8 +138,8 @@ def init_db():
     )
     """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS files(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS files (
         file_key TEXT PRIMARY KEY,
         telegram_file_id TEXT,
         file_name TEXT,
@@ -148,8 +147,8 @@ def init_db():
     )
     """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS orders(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS orders (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         product_key TEXT,
@@ -163,16 +162,16 @@ def init_db():
     )
     """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS spins(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS spins (
         user_id INTEGER,
         spin_date TEXT,
         result INTEGER
     )
     """)
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS transactions(
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         amount REAL,
@@ -191,37 +190,48 @@ def init_db():
 # HELPERS
 # =========================================================
 
-def get_user(uid):
+def now():
+    return datetime.now()
 
+
+def now_str():
+    return now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def is_admin(user_id):
+    return user_id == ADMIN_ID
+
+
+def get_user(user_id):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "SELECT * FROM users WHERE user_id=?",
-        (uid,)
+        (user_id,)
     )
 
-    r = c.fetchone()
-
+    row = cur.fetchone()
     con.close()
 
-    return r
+    return row
 
 
-def ensure_user(u, referral_by=None):
-
+def ensure_user(tg_user, referral_by=None):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "SELECT user_id FROM users WHERE user_id=?",
-        (u.id,)
+        (tg_user.id,)
     )
 
-    if not c.fetchone():
+    exists = cur.fetchone()
 
-        c.execute("""
-        INSERT INTO users(
+    if not exists:
+        cur.execute("""
+        INSERT INTO users
+        (
             user_id,
             name,
             username,
@@ -231,121 +241,83 @@ def ensure_user(u, referral_by=None):
             verified,
             created_at
         )
-        VALUES(?,?,?,0,?,0,0,?)
+        VALUES (?, ?, ?, 0, ?, 0, 0, ?)
         """, (
-            u.id,
-            u.full_name,
-            u.username or "",
+            tg_user.id,
+            tg_user.full_name,
+            tg_user.username or "",
             referral_by,
             now_str()
         ))
-
     else:
-
-        c.execute("""
+        cur.execute("""
         UPDATE users
         SET name=?, username=?
         WHERE user_id=?
         """, (
-            u.full_name,
-            u.username or "",
-            u.id
+            tg_user.full_name,
+            tg_user.username or "",
+            tg_user.id
         ))
 
     con.commit()
     con.close()
 
 
-def is_verified(uid):
-
+def is_verified(user_id):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "SELECT verified FROM users WHERE user_id=?",
-        (uid,)
+        (user_id,)
     )
 
-    r = c.fetchone()
-
+    row = cur.fetchone()
     con.close()
 
-    return bool(r and r[0])
+    return bool(row and row[0] == 1)
 
 
-def set_verified(uid):
-
+def set_verified(user_id):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "UPDATE users SET verified=1 WHERE user_id=?",
-        (uid,)
+        (user_id,)
     )
 
     con.commit()
     con.close()
 
 
-def add_balance(uid, amount):
-
+def add_balance(user_id, amount):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "UPDATE users SET balance=balance+? WHERE user_id=?",
-        (amount, uid)
+        (amount, user_id)
     )
 
     con.commit()
     con.close()
 
 
-def get_balance(uid):
-
+def get_balance(user_id):
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "SELECT balance FROM users WHERE user_id=?",
-        (uid,)
+        (user_id,)
     )
 
-    r = c.fetchone()
-
+    row = cur.fetchone()
     con.close()
 
-    return r[0] if r else 0
-
-
-def is_admin(uid):
-    return uid == ADMIN_ID
-
-
-# =========================================================
-# START WELCOME TEXT
-# =========================================================
-
-def welcome_text(first_name):
-
-    return f"""
-🏪 — {SHOP_NAME} —
-
-👋 Welcome, {first_name}!
-
-⭐ — STORE HIGHLIGHTS — ⭐
-
-│ 🔑 Premium Game Keys
-│ ⚡ Instant Delivery 24/7
-│ 🔒 100% Secure Payment
-│ 💰 Best Prices Guaranteed
-│ 🎁 Referral Rewards
-│ 📞 Professional Support
-
-━━━━━━━━━━━━━━━━━━━━
-
-🚀 Tap Shop Now to Start!
-"""
+    return row[0] if row else 0
 
 
 # =========================================================
@@ -368,7 +340,6 @@ def main_menu():
                 "📦 My Orders",
                 callback_data="orders"
             ),
-
             InlineKeyboardButton(
                 "👤 Profile",
                 callback_data="profile"
@@ -380,7 +351,6 @@ def main_menu():
                 "💰 Add Balance",
                 callback_data="add_balance"
             ),
-
             InlineKeyboardButton(
                 "🎁 Referral",
                 callback_data="referral"
@@ -406,7 +376,6 @@ def main_menu():
                 "📺 Tutorials",
                 callback_data="tutorials"
             ),
-
             InlineKeyboardButton(
                 "🆘 Support",
                 callback_data="support"
@@ -433,14 +402,21 @@ def verify_menu():
 
 async def verify_account(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    set_verified(query.from_user.id)
 
-    set_verified(q.from_user.id)
+    await query.edit_message_text(
+        f"""
+✅ ACCOUNT VERIFIED
 
-    await q.edit_message_text(
-        welcome_text(q.from_user.first_name),
+Welcome to {SHOP_NAME}!
+
+আপনার account verification complete হয়েছে।
+
+🛍️ এখন আপনি Shop ব্যবহার করতে পারবেন।
+""",
         reply_markup=main_menu()
     )
 
@@ -449,11 +425,11 @@ async def verify_account(update, context):
 # START
 # =========================================================
 
-async def start(update, context):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
-    u = update.effective_user
+    user = update.effective_user
 
-    ref = None
+    referral_by = None
 
     if context.args:
 
@@ -462,29 +438,35 @@ async def start(update, context):
         if arg.startswith("ref_"):
 
             try:
+                ref_id = int(arg.replace("ref_", ""))
 
-                rid = int(
-                    arg[4:]
-                )
-
-                if rid != u.id:
-                    ref = rid
+                if ref_id != user.id:
+                    referral_by = ref_id
 
             except ValueError:
                 pass
 
-    ensure_user(
-        u,
-        ref
-    )
+    ensure_user(user, referral_by)
 
-    if not is_verified(u.id):
+    # প্রথমবার verification
+    if not is_verified(user.id):
 
         await update.message.reply_text(
             f"""
 🏪 — {SHOP_NAME} —
 
-👋 Welcome, {u.first_name}!
+👋 Welcome, {user.first_name}!
+
+⭐ — STORE HIGHLIGHTS — ⭐
+
+│ 🔑 Premium Game Keys
+│ ⚡ Instant Delivery 24/7
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
+│ 🎁 Referral Rewards
+│ 📞 Professional Support
+
+━━━━━━━━━━━━━━━━━━━━
 
 🔐 ACCOUNT VERIFICATION
 
@@ -498,10 +480,59 @@ verify করুন।
 
         return
 
+    # verified user
     await update.message.reply_text(
-        welcome_text(
-            u.first_name
-        ),
+        f"""
+🏪 — {SHOP_NAME} —
+
+👋 Welcome back, {user.first_name}!
+
+⭐ — STORE HIGHLIGHTS — ⭐
+
+│ 🔑 Premium Game Keys
+│ ⚡ Instant Delivery 24/7
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
+│ 🎁 Referral Rewards
+│ 📞 Professional Support
+
+━━━━━━━━━━━━━━━━━━━━
+
+🚀 Tap Shop Now to Start!
+""",
+        reply_markup=main_menu()
+    )
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+async def home(update, context):
+
+    query = update.callback_query
+    await query.answer()
+
+    await query.edit_message_text(
+        f"""
+🏪 — {SHOP_NAME} —
+
+👋 Welcome back,
+{query.from_user.first_name}!
+
+⭐ — STORE HIGHLIGHTS — ⭐
+
+│ 🔑 Premium Game Keys
+│ ⚡ Instant Delivery 24/7
+│ 🔒 100% Secure Payment
+│ 💰 Best Prices Guaranteed
+│ 🎁 Referral Rewards
+│ 📞 Professional Support
+
+━━━━━━━━━━━━━━━━━━━━
+
+🚀 Tap Shop Now to Start!
+""",
         reply_markup=main_menu()
     )
 
@@ -512,19 +543,18 @@ verify করুন।
 
 async def shop(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    if not is_verified(query.from_user.id):
 
-    if not is_verified(q.from_user.id):
-
-        await q.message.reply_text(
+        await query.message.reply_text(
             "❌ আগে Account Verify করুন।"
         )
 
         return
 
-    kb = [
+    keyboard = [
 
         [
             InlineKeyboardButton(
@@ -583,16 +613,15 @@ async def shop(update, context):
         ]
     ]
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 🛍️ — {SHOP_NAME} —
 
 📦 SELECT PRODUCT
 
-নিচে যে product নিতে চান
-সেটাতে click করুন।
+যে product নিতে চান সেটাতে click করুন।
 """,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -602,48 +631,45 @@ async def shop(update, context):
 
 async def sabbir_pro_menu(update, context):
 
-    q = update.callback_query
-
-    await q.answer()
+    query = update.callback_query
+    await query.answer()
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
     stock = {}
 
-    for d in (7, 15, 30):
+    for duration in (7, 15, 30):
 
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM credentials
-            WHERE sold=0
-            AND duration=?
-            """,
-            (d,)
-        )
+        cur.execute("""
+        SELECT COUNT(*)
+        FROM credentials
+        WHERE sold=0
+        AND duration=?
+        """, (duration,))
 
-        stock[d] = c.fetchone()[0]
+        stock[duration] = cur.fetchone()[0]
 
     con.close()
 
-    def sd(d):
+    # =====================================================
+    # IMPORTANT STOCK LOGIC
+    # =====================================================
 
-        n = stock[d]
+    def stock_display(duration):
 
-        if 0 < n <= 4:
+        count = stock[duration]
 
-            return f"⚠️ {n} Left", "⚠️"
-
-        if n <= 0:
+        if count <= 0:
 
             return "❌ Out of Stock", "❌"
 
+        # 1/2/3/4 থাকলেও আর ⚠️ দেখাবে না
         return "✅ In Stock", "✅"
 
-    s7, i7 = sd(7)
-    s15, i15 = sd(15)
-    s30, i30 = sd(30)
+    stock_7, icon_7 = stock_display(7)
+    stock_15, icon_15 = stock_display(15)
+    stock_30, icon_30 = stock_display(30)
 
     text = f"""
 🔑 SABBIR MODE PRO APK
@@ -652,20 +678,20 @@ async def sabbir_pro_menu(update, context):
 📦 STOCK & PRICING
 ━━━━━━━━━━━━━━━━━━━━
 
-{i7} 7 Day
-├ 📦 Stock: {s7}
+{icon_7} 7 Day
+├ 📦 Stock: {stock_7}
 └ 💰 Price: ৳40
 
 ━━━━━━━━━━━━━━━━━━━━
 
-{i15} 15 Days
-├ 📦 Stock: {s15}
+{icon_15} 15 Days
+├ 📦 Stock: {stock_15}
 └ 💰 Price: ৳80
 
 ━━━━━━━━━━━━━━━━━━━━
 
-{i30} 30 Days
-├ 📦 Stock: {s30}
+{icon_30} 30 Days
+├ 📦 Stock: {stock_30}
 └ 💰 Price: ৳120
 
 ━━━━━━━━━━━━━━━━━━━━
@@ -675,7 +701,7 @@ async def sabbir_pro_menu(update, context):
 🎯 Select your plan below:
 """
 
-    kb = [
+    keyboard = [
 
         [
             InlineKeyboardButton(
@@ -706,9 +732,9 @@ async def sabbir_pro_menu(update, context):
         ]
     ]
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         text,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -718,95 +744,78 @@ async def sabbir_pro_menu(update, context):
 
 async def product_select(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    key = query.data.split(":", 1)[1]
 
-    key = q.data.split(
-        ":",
-        1
-    )[1]
+    product = PRODUCTS.get(key)
 
-    p = PRODUCTS.get(key)
+    if not product:
 
-    if not p:
-
-        await q.message.reply_text(
+        await query.message.reply_text(
             "❌ Product পাওয়া যায়নি।"
         )
 
         return
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    if p["type"] == "credential":
+    stock_available = False
+    stock_text = "❌ Out of Stock"
 
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM credentials
-            WHERE sold=0
-            AND duration=?
-            """,
-            (p["duration"],)
-        )
+    if product["type"] == "credential":
 
-        n = c.fetchone()[0]
+        cur.execute("""
+        SELECT COUNT(*)
+        FROM credentials
+        WHERE sold=0
+        AND duration=?
+        """, (product["duration"],))
 
-        if 0 < n <= 4:
+        count = cur.fetchone()[0]
 
-            stock = f"⚠️ {n} Left"
-
-        elif n > 0:
-
-            stock = f"✅ In Stock ({n})"
-
-        else:
-
-            stock = "❌ Out of Stock"
+        if count > 0:
+            stock_available = True
+            stock_text = "✅ In Stock"
 
     else:
 
-        c.execute(
-            """
-            SELECT telegram_file_id
-            FROM files
-            WHERE file_key=?
-            """,
-            (p["file_key"],)
-        )
+        cur.execute("""
+        SELECT telegram_file_id
+        FROM files
+        WHERE file_key=?
+        """, (product["file_key"],))
 
-        stock = (
-            "✅ In Stock"
-            if c.fetchone()
-            else
-            "❌ Out of Stock"
-        )
+        row = cur.fetchone()
+
+        if row:
+            stock_available = True
+            stock_text = "✅ In Stock"
 
     con.close()
 
-    back = (
+    back_callback = (
         "sabbir_pro_menu"
-        if p["type"] == "credential"
-        else
-        "shop"
+        if product["type"] == "credential"
+        else "shop"
     )
 
-    if stock == "❌ Out of Stock":
+    if not stock_available:
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             f"""
 ❌ OUT OF STOCK
 
 📦 Product:
-{p['name']}
+{product['name']}
 
 📊 Stock:
 ❌ Out of Stock
 
 💰 Price:
-৳{p['price']}
+৳{product['price']}
 
 দুঃখিত, এই product এখন available নেই।
 """,
@@ -814,7 +823,7 @@ async def product_select(update, context):
                 [
                     InlineKeyboardButton(
                         "🔙 Back",
-                        callback_data=back
+                        callback_data=back_callback
                     )
                 ]
             ])
@@ -822,25 +831,23 @@ async def product_select(update, context):
 
         return
 
-    context.user_data[
-        "selected_product"
-    ] = key
+    context.user_data["selected_product"] = key
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 🏪 {SHOP_NAME}
 
-📦 {p['name']}
+📦 {product['name']}
 
 ━━━━━━━━━━━━━━━━
 
 📊 STOCK & PRICING
 
 📦 Stock:
-{stock}
+{stock_text}
 
 💰 Price:
-৳{p['price']}
+৳{product['price']}
 
 ━━━━━━━━━━━━━━━━
 
@@ -865,7 +872,7 @@ async def product_select(update, context):
             [
                 InlineKeyboardButton(
                     "🔙 Back",
-                    callback_data=back
+                    callback_data=back_callback
                 )
             ]
         ])
@@ -878,109 +885,46 @@ async def product_select(update, context):
 
 async def payment_method(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    method = query.data.split(":")[1]
 
-    method = q.data.split(":")[1]
+    product_key = context.user_data.get("selected_product")
 
-    key = context.user_data.get(
-        "selected_product"
-    )
+    if not product_key or product_key not in PRODUCTS:
 
-    if not key or key not in PRODUCTS:
-
-        await q.edit_message_text(
+        await query.edit_message_text(
             "❌ Product session expired.",
             reply_markup=main_menu()
         )
 
         return
 
-    p = PRODUCTS[key]
+    product = PRODUCTS[product_key]
 
-    con = db()
-    c = con.cursor()
+    if method == "bkash":
 
-    if p["type"] == "credential":
-
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM credentials
-            WHERE sold=0
-            AND duration=?
-            """,
-            (p["duration"],)
-        )
-
-        ok = c.fetchone()[0] > 0
+        number = BKASH
+        name = "bKash"
 
     else:
 
-        c.execute(
-            """
-            SELECT telegram_file_id
-            FROM files
-            WHERE file_key=?
-            """,
-            (p["file_key"],)
-        )
+        number = NAGAD
+        name = "Nagad"
 
-        ok = bool(c.fetchone())
+    context.user_data["payment_method"] = method
+    context.user_data["waiting_tx"] = False
 
-    con.close()
-
-    if not ok:
-
-        back = (
-            "sabbir_pro_menu"
-            if p["type"] == "credential"
-            else
-            "shop"
-        )
-
-        await q.edit_message_text(
-            "❌ এই product এখন Out of Stock।",
-            reply_markup=InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton(
-                        "🔙 Back",
-                        callback_data=back
-                    )
-                ]
-            ])
-        )
-
-        return
-
-    number = (
-        BKASH
-        if method == "bkash"
-        else
-        NAGAD
-    )
-
-    name = (
-        "bKash"
-        if method == "bkash"
-        else
-        "Nagad"
-    )
-
-    context.user_data[
-        "payment_method"
-    ] = method
-
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 💳 PAYMENT INFORMATION
 
 📦 Product:
-{p['name']}
+{product['name']}
 
 💰 Price:
-৳{p['price']}
+৳{product['price']}
 
 💳 Method:
 {name}
@@ -1008,7 +952,7 @@ click করে Transaction ID পাঠান।
             [
                 InlineKeyboardButton(
                     "🔙 Back",
-                    callback_data=f"product:{key}"
+                    callback_data=f"product:{product_key}"
                 )
             ],
 
@@ -1028,15 +972,12 @@ click করে Transaction ID পাঠান।
 
 async def send_tx(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    context.user_data["waiting_tx"] = True
 
-    context.user_data[
-        "waiting_tx"
-    ] = True
-
-    await q.message.reply_text(
+    await query.message.reply_text(
         """
 🧾 TRANSACTION ID
 
@@ -1055,59 +996,10 @@ TX123456789
 
 async def add_balance_menu(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    kb = [
-
-        [
-            InlineKeyboardButton(
-                "💵 100 Tk",
-                callback_data="bal_amount:100"
-            ),
-
-            InlineKeyboardButton(
-                "💵 200 Tk",
-                callback_data="bal_amount:200"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "💵 300 Tk",
-                callback_data="bal_amount:300"
-            ),
-
-            InlineKeyboardButton(
-                "💵 400 Tk",
-                callback_data="bal_amount:400"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "💵 500 Tk",
-                callback_data="bal_amount:500"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "✏️ Custom Amount",
-                callback_data="bal_custom"
-            )
-        ],
-
-        [
-            InlineKeyboardButton(
-                "🔙 Back",
-                callback_data="home"
-            )
-        ]
-    ]
-
-    await q.edit_message_text(
+    await query.edit_message_text(
         """
 💰 — ADD BALANCE —
 
@@ -1115,26 +1007,65 @@ async def add_balance_menu(update, context):
 
 👇 একটি amount select করুন:
 """,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=InlineKeyboardMarkup([
+
+            [
+                InlineKeyboardButton(
+                    "💵 100 Tk",
+                    callback_data="bal_amount:100"
+                ),
+                InlineKeyboardButton(
+                    "💵 200 Tk",
+                    callback_data="bal_amount:200"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "💵 300 Tk",
+                    callback_data="bal_amount:300"
+                ),
+                InlineKeyboardButton(
+                    "💵 400 Tk",
+                    callback_data="bal_amount:400"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "💵 500 Tk",
+                    callback_data="bal_amount:500"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "✏️ Custom Amount",
+                    callback_data="bal_custom"
+                )
+            ],
+
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="home"
+                )
+            ]
+        ])
     )
 
 
 async def balance_fixed_amount(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    amount = float(query.data.split(":")[1])
 
-    amount = float(
-        q.data.split(":")[1]
-    )
-
-    context.user_data[
-        "balance_amount"
-    ] = amount
+    context.user_data["balance_amount"] = amount
 
     await show_balance_payment(
-        q,
+        query,
         context,
         amount
     )
@@ -1142,15 +1073,12 @@ async def balance_fixed_amount(update, context):
 
 async def custom_balance(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    context.user_data["waiting_balance_amount"] = True
 
-    context.user_data[
-        "waiting_balance_amount"
-    ] = True
-
-    await q.edit_message_text(
+    await query.edit_message_text(
         """
 ✏️ CUSTOM AMOUNT
 
@@ -1175,13 +1103,9 @@ async def custom_balance(update, context):
     )
 
 
-async def show_balance_payment(
-    q,
-    context,
-    amount
-):
+async def show_balance_payment(query, context, amount):
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 💰 — ADD BALANCE —
 
@@ -1197,7 +1121,7 @@ async def show_balance_payment(
 
             [
                 InlineKeyboardButton(
-                    " bKash",
+                    "🇧 bKash",
                     callback_data="balancepay:bkash"
                 )
             ],
@@ -1219,18 +1143,36 @@ async def show_balance_payment(
     )
 
 
-async def show_balance_payment_message(
-    update,
-    context,
-    amount
-):
+async def handle_balance_amount(update, context):
+
+    if not context.user_data.get("waiting_balance_amount"):
+        return False
+
+    try:
+
+        amount = float(
+            update.message.text.strip()
+        )
+
+        if amount <= 0:
+            raise ValueError
+
+    except ValueError:
+
+        await update.message.reply_text(
+            "❌ সঠিক amount লিখুন।"
+        )
+
+        return True
+
+    context.user_data["waiting_balance_amount"] = False
+    context.user_data["balance_amount"] = amount
 
     await update.message.reply_text(
         f"""
 💰 — ADD BALANCE —
 
 💵 Amount:
-
 ৳{amount:.2f}
 
 💳 Select Payment Method:
@@ -1239,7 +1181,7 @@ async def show_balance_payment_message(
 
             [
                 InlineKeyboardButton(
-                    " bKash",
+                    "🇧 bKash",
                     callback_data="balancepay:bkash"
                 )
             ],
@@ -1260,51 +1202,45 @@ async def show_balance_payment_message(
         ])
     )
 
+    return True
+
+
+# =========================================================
+# BALANCE PAYMENT
+# =========================================================
 
 async def balance_payment(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    method = query.data.split(":")[1]
 
-    method = q.data.split(":")[1]
-
-    amount = context.user_data.get(
-        "balance_amount"
-    )
+    amount = context.user_data.get("balance_amount")
 
     if not amount:
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             "❌ Session expired.",
             reply_markup=main_menu()
         )
 
         return
 
-    number = (
-        BKASH
-        if method == "bkash"
-        else
-        NAGAD
-    )
+    if method == "bkash":
 
-    name = (
-        "bKash"
-        if method == "bkash"
-        else
-        "Nagad"
-    )
+        number = BKASH
+        method_name = "bKash"
 
-    context.user_data[
-        "balance_payment_method"
-    ] = method
+    else:
 
-    context.user_data[
-        "waiting_balance_tx"
-    ] = True
+        number = NAGAD
+        method_name = "Nagad"
 
-    await q.edit_message_text(
+    context.user_data["balance_payment_method"] = method
+    context.user_data["waiting_balance_tx"] = True
+
+    await query.edit_message_text(
         f"""
 💰 — ADD BALANCE —
 
@@ -1312,7 +1248,7 @@ async def balance_payment(update, context):
 ৳{amount:.2f}
 
 💳 Payment:
-{name}
+{method_name}
 
 ━━━━━━━━━━━━━━━━
 
@@ -1336,75 +1272,25 @@ Transaction ID লিখে পাঠান।
     )
 
 
-async def handle_balance_amount(update, context):
-
-    if not context.user_data.get(
-        "waiting_balance_amount"
-    ):
-        return False
-
-    try:
-
-        amount = float(
-            update.message.text.strip()
-        )
-
-        if amount <= 0:
-            raise ValueError
-
-    except:
-
-        await update.message.reply_text(
-            "❌ সঠিক amount লিখুন।"
-        )
-
-        return True
-
-    context.user_data[
-        "waiting_balance_amount"
-    ] = False
-
-    context.user_data[
-        "balance_amount"
-    ] = amount
-
-    await show_balance_payment_message(
-        update,
-        context,
-        amount
-    )
-
-    return True
-
-
 async def balance_transaction(update, context):
 
-    if not context.user_data.get(
-        "waiting_balance_tx"
-    ):
+    if not context.user_data.get("waiting_balance_tx"):
         return False
 
-    context.user_data[
-        "waiting_balance_tx"
-    ] = False
+    context.user_data["waiting_balance_tx"] = False
 
-    u = update.effective_user
+    user = update.effective_user
 
-    amount = context.user_data.get(
-        "balance_amount"
-    )
-
-    method = context.user_data.get(
-        "balance_payment_method"
-    )
-
-    tx = update.message.text.strip()
+    amount = context.user_data.get("balance_amount")
+    method = context.user_data.get("balance_payment_method")
+    tx_text = update.message.text.strip()
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute("""
-    INSERT INTO transactions(
+    cur.execute("""
+    INSERT INTO transactions
+    (
         user_id,
         amount,
         payment_method,
@@ -1412,17 +1298,17 @@ async def balance_transaction(update, context):
         status,
         created_at
     )
-    VALUES(?,?,?,?,?,?)
+    VALUES (?, ?, ?, ?, ?, ?)
     """, (
-        u.id,
+        user.id,
         amount,
         method,
-        tx,
+        tx_text,
         "pending",
         now_str()
     ))
 
-    tid = c.lastrowid
+    tx_id = cur.lastrowid
 
     con.commit()
     con.close()
@@ -1432,7 +1318,7 @@ async def balance_transaction(update, context):
 ✅ BALANCE REQUEST SUBMITTED
 
 🧾 Request ID:
-#{tid}
+#{tx_id}
 
 💰 Amount:
 ৳{amount:.2f}
@@ -1446,18 +1332,18 @@ async def balance_transaction(update, context):
     )
 
     await context.bot.send_message(
-        ADMIN_ID,
-        f"""
+        chat_id=ADMIN_ID,
+        text=f"""
 💰 NEW BALANCE REQUEST
 
 🧾 Request:
-#{tid}
+#{tx_id}
 
 👤 User:
-{u.full_name}
+{user.full_name}
 
 🆔 ID:
-{u.id}
+{user.id}
 
 💰 Amount:
 ৳{amount:.2f}
@@ -1466,18 +1352,17 @@ async def balance_transaction(update, context):
 {method}
 
 🧾 Transaction:
-{tx}
+{tx_text}
 """,
         reply_markup=InlineKeyboardMarkup([
             [
                 InlineKeyboardButton(
                     "✅ ACCEPT",
-                    callback_data=f"accept_balance:{tid}"
+                    callback_data=f"accept_balance:{tx_id}"
                 ),
-
                 InlineKeyboardButton(
                     "❌ REJECT",
-                    callback_data=f"reject_balance:{tid}"
+                    callback_data=f"reject_balance:{tx_id}"
                 )
             ]
         ])
@@ -1492,68 +1377,60 @@ async def balance_transaction(update, context):
 
 async def profile(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    user = get_user(query.from_user.id)
 
-    u = get_user(
-        q.from_user.id
-    )
+    if not user:
 
-    if not u:
+        ensure_user(query.from_user)
+        user = get_user(query.from_user.id)
 
-        ensure_user(
-            q.from_user
-        )
-
-        u = get_user(
-            q.from_user.id
-        )
+    user_id = user[0]
+    name = user[1]
+    balance = user[3]
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT COUNT(*)
-        FROM orders
-        WHERE user_id=?
-        AND status='accepted'
-        """,
-        (u[0],)
-    )
+    cur.execute("""
+    SELECT COUNT(*)
+    FROM orders
+    WHERE user_id=?
+    AND status='accepted'
+    """, (user_id,))
 
-    orders_count = c.fetchone()[0]
+    orders_count = cur.fetchone()[0]
 
-    c.execute(
-        """
-        SELECT COUNT(*)
-        FROM users
-        WHERE referral_by=?
-        """,
-        (u[0],)
-    )
+    cur.execute("""
+    SELECT COUNT(*)
+    FROM users
+    WHERE referral_by=?
+    """, (user_id,))
 
-    referrals = c.fetchone()[0]
+    referrals = cur.fetchone()[0]
 
     con.close()
 
-    await q.edit_message_text(
+    bot_username = context.bot.username
+
+    await query.edit_message_text(
         f"""
 👤 — YOUR PROFILE —
 
 🆔 User ID:
-{u[0]}
+{user_id}
 
 👤 Name:
-{u[1]}
+{name}
 
 ━━━━━━━━━━━━━━━━
 
 💰 BALANCE
 
 💵 Current:
-৳{u[3]:.2f}
+৳{balance:.2f}
 
 ━━━━━━━━━━━━━━━━
 
@@ -1569,7 +1446,7 @@ async def profile(update, context):
 
 🔗 REFERRAL LINK
 
-https://t.me/{context.bot.username}?start=ref_{u[0]}
+https://t.me/{bot_username}?start=ref_{user_id}
 """,
         reply_markup=InlineKeyboardMarkup([
 
@@ -1603,53 +1480,53 @@ https://t.me/{context.bot.username}?start=ref_{u[0]}
 
 async def orders(update, context):
 
-    q = update.callback_query
-
-    await q.answer()
+    query = update.callback_query
+    await query.answer()
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT
-            id,
-            product_name,
-            amount,
-            status,
-            created_at
-        FROM orders
-        WHERE user_id=?
-        ORDER BY id DESC
-        LIMIT 10
-        """,
-        (q.from_user.id,)
-    )
+    cur.execute("""
+    SELECT
+        id,
+        product_name,
+        amount,
+        status,
+        created_at
+    FROM orders
+    WHERE user_id=?
+    ORDER BY id DESC
+    LIMIT 10
+    """, (query.from_user.id,))
 
-    rows = c.fetchall()
+    rows = cur.fetchall()
 
     con.close()
 
-    text = "📦 — MY ORDERS —\n\n"
-
     if not rows:
 
-        text += "No orders yet."
+        text = """
+📦 — MY ORDERS —
+
+No orders yet.
+"""
 
     else:
 
-        for r in rows:
+        text = "📦 — MY ORDERS —\n\n"
+
+        for row in rows:
 
             text += f"""
-🧾 #{r[0]}
-📦 {r[1]}
-💰 ৳{r[2]}
-📌 {r[3].upper()}
-⏰ {r[4]}
+🧾 #{row[0]}
+📦 {row[1]}
+💰 ৳{row[2]}
+📌 {row[3].upper()}
+⏰ {row[4]}
 
 """
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup([
             [
@@ -1668,31 +1545,29 @@ async def orders(update, context):
 
 async def referral(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    uid = q.from_user.id
+    user_id = query.from_user.id
 
     link = (
-        f"https://t.me/"
-        f"{context.bot.username}"
-        f"?start=ref_{uid}"
+        f"https://t.me/{context.bot.username}"
+        f"?start=ref_{user_id}"
     )
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
+    cur.execute(
         "SELECT COUNT(*) FROM users WHERE referral_by=?",
-        (uid,)
+        (user_id,)
     )
 
-    n = c.fetchone()[0]
+    referrals = cur.fetchone()[0]
 
     con.close()
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 🎁 — REFERRAL PROGRAM —
 
@@ -1700,7 +1575,7 @@ async def referral(update, context):
 50 Tk
 
 👥 Total Referrals:
-{n}
+{referrals}
 
 ━━━━━━━━━━━━━━━━
 
@@ -1714,14 +1589,12 @@ Friend আপনার link দিয়ে join করলে
 referral হিসেবে save হবে।
 """,
         reply_markup=InlineKeyboardMarkup([
-
             [
                 InlineKeyboardButton(
                     "💰 View Balance",
                     callback_data="profile"
                 )
             ],
-
             [
                 InlineKeyboardButton(
                     "🔙 Back",
@@ -1738,44 +1611,38 @@ referral হিসেবে save হবে।
 
 async def lucky_spin(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    today = datetime.now().strftime(
-        "%Y-%m-%d"
-    )
+    today = datetime.now().strftime("%Y-%m-%d")
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT result
-        FROM spins
-        WHERE user_id=?
-        AND spin_date=?
-        """,
-        (
-            q.from_user.id,
-            today
-        )
-    )
+    cur.execute("""
+    SELECT result
+    FROM spins
+    WHERE user_id=?
+    AND spin_date=?
+    """, (
+        query.from_user.id,
+        today
+    ))
 
-    old = c.fetchone()
+    already = cur.fetchone()
 
     con.close()
 
-    if old:
+    if already:
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             f"""
 🎰 — LUCKY SPIN —
 
 আজকে already spin করেছেন।
 
 🎁 Result:
-{old[0]} Tk
+{already[0]} Tk
 
 🕐 Tomorrow আবার try করুন।
 """,
@@ -1791,7 +1658,7 @@ async def lucky_spin(update, context):
 
         return
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         """
 🎰 — LUCKY SPIN —
 
@@ -1803,64 +1670,56 @@ async def lucky_spin(update, context):
 
     await asyncio.sleep(2)
 
-    result = random.randint(
-        0,
-        15
-    )
+    result = random.randint(0, 15)
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        INSERT INTO spins(
-            user_id,
-            spin_date,
-            result
-        )
-        VALUES(?,?,?)
-        """,
-        (
-            q.from_user.id,
-            today,
-            result
-        )
+    cur.execute("""
+    INSERT INTO spins
+    (
+        user_id,
+        spin_date,
+        result
     )
+    VALUES (?, ?, ?)
+    """, (
+        query.from_user.id,
+        today,
+        result
+    ))
 
     con.commit()
     con.close()
 
-    if result:
+    if result == 0:
 
-        add_balance(
-            q.from_user.id,
-            result
-        )
-
-        rt = f"""
-🎉 CONGRATULATIONS!
-
-💰 আপনি পেয়েছেন:
-৳{result}
-
-✅ Balance-এ add হয়েছে.
-"""
-
-    else:
-
-        rt = """
+        result_text = """
 😅 No Prize This Time!
 
 Tomorrow আবার চেষ্টা করুন।
 """
 
-    await q.edit_message_text(
+    else:
+
+        add_balance(query.from_user.id, result)
+
+        result_text = f"""
+🎉 CONGRATULATIONS!
+
+💰 আপনি পেয়েছেন:
+৳{result}
+
+✅ Balance-এ add হয়েছে।
+"""
+
+    await query.edit_message_text(
         f"""
 🎰 — SPIN RESULT —
 
 ━━━━━━━━━━━━━━━━
 
-{rt}
+{result_text}
 
 ━━━━━━━━━━━━━━━━
 
@@ -1874,7 +1733,6 @@ Tomorrow
                     callback_data="profile"
                 )
             ],
-
             [
                 InlineKeyboardButton(
                     "🔙 Back",
@@ -1891,134 +1749,119 @@ Tomorrow
 
 async def downloads(update, context):
 
-    q = update.callback_query
-
-    await q.answer()
+    query = update.callback_query
+    await query.answer()
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT DISTINCT product_key
-        FROM orders
-        WHERE user_id=?
-        AND status='accepted'
-        """,
-        (q.from_user.id,)
-    )
+    cur.execute("""
+    SELECT DISTINCT product_key
+    FROM orders
+    WHERE user_id=?
+    AND status='accepted'
+    """, (query.from_user.id,))
 
-    rows = c.fetchall()
+    rows = cur.fetchall()
 
     con.close()
 
-    kb = []
+    keyboard = []
 
     for row in rows:
 
         key = row[0]
+        product = PRODUCTS.get(key)
 
-        p = PRODUCTS.get(key)
+        if product and product["type"] == "file":
 
-        if p and p["type"] == "file":
-
-            kb.append([
+            keyboard.append([
                 InlineKeyboardButton(
-                    f"📁 {p['name']}",
+                    f"📁 {product['name']}",
                     callback_data=f"download:{key}"
                 )
             ])
 
-    kb.append([
+    keyboard.append([
         InlineKeyboardButton(
             "🔙 Back",
             callback_data="home"
         )
     ])
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         """
 📁 — DOWNLOAD FILES —
 
 আপনার purchased files:
 """,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 async def download_file(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
+    key = query.data.split(":", 1)[1]
 
-    key = q.data.split(
-        ":",
-        1
-    )[1]
-
-    p = PRODUCTS.get(key)
-
-    if not p:
+    if key not in PRODUCTS:
         return
 
+    product = PRODUCTS[key]
+
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT 1
-        FROM orders
-        WHERE user_id=?
-        AND product_key=?
-        AND status='accepted'
-        LIMIT 1
-        """,
-        (
-            q.from_user.id,
-            key
-        )
-    )
+    cur.execute("""
+    SELECT 1
+    FROM orders
+    WHERE user_id=?
+    AND product_key=?
+    AND status='accepted'
+    LIMIT 1
+    """, (
+        query.from_user.id,
+        key
+    ))
 
-    bought = c.fetchone()
+    purchased = cur.fetchone()
 
-    c.execute(
-        """
-        SELECT telegram_file_id,file_name
-        FROM files
-        WHERE file_key=?
-        """,
-        (p["file_key"],)
-    )
+    cur.execute("""
+    SELECT telegram_file_id,file_name
+    FROM files
+    WHERE file_key=?
+    """, (product["file_key"],))
 
-    f = c.fetchone()
+    file_row = cur.fetchone()
 
     con.close()
 
-    if not bought:
+    if not purchased:
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             "❌ এই product আপনি purchase করেননি।"
         )
 
         return
 
-    if not f:
+    if not file_row:
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             "❌ File এখন available নেই।"
         )
 
         return
 
     await context.bot.send_document(
-        q.from_user.id,
-        f[0],
+        chat_id=query.from_user.id,
+        document=file_row[0],
         caption=f"""
-📁 {p['name']}
+📁 {product['name']}
 
 File:
-{f[1]}
+{file_row[1]}
 """
     )
 
@@ -2029,40 +1872,40 @@ File:
 
 async def transactions(update, context):
 
-    q = update.callback_query
-
-    await q.answer()
+    query = update.callback_query
+    await query.answer()
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT
-            amount,
-            payment_method,
-            transaction_id,
-            status,
-            created_at
-        FROM transactions
-        WHERE user_id=?
-        ORDER BY id DESC
-        LIMIT 10
-        """,
-        (q.from_user.id,)
-    )
+    cur.execute("""
+    SELECT
+        amount,
+        payment_method,
+        transaction_id,
+        status,
+        created_at
+    FROM transactions
+    WHERE user_id=?
+    ORDER BY id DESC
+    LIMIT 10
+    """, (query.from_user.id,))
 
-    rows = c.fetchall()
+    rows = cur.fetchall()
 
     con.close()
 
-    text = "📊 — TRANSACTIONS —\n\n"
-
     if not rows:
 
-        text += "No transactions yet."
+        text = """
+📊 — TRANSACTIONS —
+
+No transactions yet.
+"""
 
     else:
+
+        text = "📊 — TRANSACTIONS —\n\n"
 
         for r in rows:
 
@@ -2075,7 +1918,7 @@ async def transactions(update, context):
 
 """
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup([
             [
@@ -2089,89 +1932,85 @@ async def transactions(update, context):
 
 
 # =========================================================
-# ORDER ACTION
+# ORDER ACCEPT / REJECT
 # =========================================================
 
 async def order_action(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    if not is_admin(q.from_user.id):
+    if not is_admin(query.from_user.id):
         return
 
-    action, oid = q.data.split(":")
-
-    oid = int(oid)
+    action, order_id = query.data.split(":")
+    order_id = int(order_id)
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT
-            user_id,
-            product_key,
-            amount,
-            status
-        FROM orders
-        WHERE id=?
-        """,
-        (oid,)
-    )
+    cur.execute("""
+    SELECT
+        user_id,
+        product_key,
+        amount,
+        status
+    FROM orders
+    WHERE id=?
+    """, (order_id,))
 
-    row = c.fetchone()
+    row = cur.fetchone()
 
     if not row:
 
         con.close()
         return
 
-    uid, key, amount, status = row
+    user_id, product_key, amount, status = row
 
     if status != "pending":
 
         con.close()
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             "⚠️ Already processed."
         )
 
         return
 
-    p = PRODUCTS.get(key)
+    product = PRODUCTS.get(product_key)
 
-    if not p:
+    if not product:
 
         con.close()
         return
 
+    # =====================================================
+    # REJECT
+    # =====================================================
+
     if action == "reject_order":
 
-        c.execute(
-            """
-            UPDATE orders
-            SET status='rejected'
-            WHERE id=?
-            """,
-            (oid,)
-        )
+        cur.execute("""
+        UPDATE orders
+        SET status='rejected'
+        WHERE id=?
+        """, (order_id,))
 
         con.commit()
         con.close()
 
-        await q.edit_message_text(
-            f"❌ Order #{oid} rejected."
+        await query.edit_message_text(
+            f"❌ Order #{order_id} rejected."
         )
 
         await context.bot.send_message(
-            uid,
-            f"""
+            chat_id=user_id,
+            text=f"""
 ❌ ORDER REJECTED
 
 🧾 Order:
-#{oid}
+#{order_id}
 
 📩 Support:
 {SUPPORT}
@@ -2180,96 +2019,87 @@ async def order_action(update, context):
 
         return
 
-    if p["type"] == "credential":
+    # =====================================================
+    # CREDENTIAL DELIVERY
+    # =====================================================
 
-        c.execute(
-            """
-            SELECT
-                id,
-                username,
-                password,
-                duration
-            FROM credentials
-            WHERE sold=0
-            AND duration=?
-            ORDER BY id
-            LIMIT 1
-            """,
-            (p["duration"],)
-        )
+    if product["type"] == "credential":
 
-        cred = c.fetchone()
+        cur.execute("""
+        SELECT
+            id,
+            username,
+            password,
+            duration
+        FROM credentials
+        WHERE sold=0
+        AND duration=?
+        ORDER BY id ASC
+        LIMIT 1
+        """, (product["duration"],))
 
-        if not cred:
+        credential = cur.fetchone()
+
+        if not credential:
 
             con.close()
 
-            await q.message.reply_text(
+            await query.message.reply_text(
                 "❌ এই duration-এর কোনো stock নেই।"
             )
 
             return
 
-        cid = cred[0]
-        username = cred[1]
-        password = cred[2]
-        dur = cred[3]
+        credential_id = credential[0]
+        username = credential[1]
+        password = credential[2]
+        duration = credential[3]
 
-        exp = now() + timedelta(
-            days=dur
-        )
+        expires = now() + timedelta(days=duration)
 
-        c.execute(
-            """
-            UPDATE credentials
-            SET
-                sold=1,
-                sold_to=?,
-                sold_at=?,
-                expires_at=?
-            WHERE id=?
-            """,
-            (
-                uid,
-                now_str(),
-                exp.strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                ),
-                cid
-            )
-        )
+        cur.execute("""
+        UPDATE credentials
+        SET
+            sold=1,
+            sold_to=?,
+            sold_at=?,
+            expires_at=?
+        WHERE id=?
+        """, (
+            user_id,
+            now_str(),
+            expires.strftime("%Y-%m-%d %H:%M:%S"),
+            credential_id
+        ))
 
-        c.execute(
-            """
-            UPDATE orders
-            SET
-                status='accepted',
-                delivered_at=?
-            WHERE id=?
-            """,
-            (
-                now_str(),
-                oid
-            )
-        )
+        cur.execute("""
+        UPDATE orders
+        SET
+            status='accepted',
+            delivered_at=?
+        WHERE id=?
+        """, (
+            now_str(),
+            order_id
+        ))
 
         con.commit()
         con.close()
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             f"""
-✅ Order #{oid}
+✅ Order #{order_id}
 
 ACCEPTED & DELIVERED
 """
         )
 
         await context.bot.send_message(
-            uid,
-            f"""
+            chat_id=user_id,
+            text=f"""
 🎉 ORDER SUCCESSFUL
 
-📦 {p['name']}
+📦 {product['name']}
 
 👤 Username:
 {username}
@@ -2278,10 +2108,10 @@ ACCEPTED & DELIVERED
 {password}
 
 ⏳ Duration:
-{dur} Day
+{duration} Day
 
 📅 Expires:
-{exp.strftime("%Y-%m-%d %H:%M:%S")}
+{expires.strftime("%Y-%m-%d %H:%M:%S")}
 
 📩 Support:
 {SUPPORT}
@@ -2290,64 +2120,67 @@ ACCEPTED & DELIVERED
 
         return
 
-    c.execute(
-        """
-        SELECT
-            telegram_file_id,
-            file_name
-        FROM files
-        WHERE file_key=?
-        """,
-        (p["file_key"],)
-    )
+    # =====================================================
+    # FILE DELIVERY
+    # =====================================================
 
-    f = c.fetchone()
+    file_key = product["file_key"]
 
-    if not f:
+    cur.execute("""
+    SELECT
+        telegram_file_id,
+        file_name
+    FROM files
+    WHERE file_key=?
+    """, (file_key,))
+
+    file_row = cur.fetchone()
+
+    if not file_row:
 
         con.close()
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             "❌ File Admin এখনো upload করেননি।"
         )
 
         return
 
-    c.execute(
-        """
-        UPDATE orders
-        SET
-            status='accepted',
-            delivered_at=?
-        WHERE id=?
-        """,
-        (
-            now_str(),
-            oid
-        )
-    )
+    file_id = file_row[0]
+    file_name = file_row[1]
+
+    cur.execute("""
+    UPDATE orders
+    SET
+        status='accepted',
+        delivered_at=?
+    WHERE id=?
+    """, (
+        now_str(),
+        order_id
+    ))
 
     con.commit()
     con.close()
 
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
-✅ Order #{oid}
+✅ Order #{order_id}
 
 ACCEPTED & DELIVERED
 """
     )
 
     await context.bot.send_document(
-        uid,
-        f[0],
+        chat_id=user_id,
+        document=file_id,
         caption=f"""
 🎉 ORDER SUCCESSFUL
 
-📦 {p['name']}
+📦 {product['name']}
 
 📁 File:
-{f[1]}
+{file_name}
 
 📩 Support:
 {SUPPORT}
@@ -2356,51 +2189,46 @@ ACCEPTED & DELIVERED
 
 
 # =========================================================
-# BALANCE ACTION
+# BALANCE ACCEPT / REJECT
 # =========================================================
 
 async def balance_action(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    if not is_admin(q.from_user.id):
+    if not is_admin(query.from_user.id):
         return
 
-    action, tid = q.data.split(":")
-
-    tid = int(tid)
+    action, txid = query.data.split(":")
+    txid = int(txid)
 
     con = db()
-    c = con.cursor()
+    cur = con.cursor()
 
-    c.execute(
-        """
-        SELECT
-            user_id,
-            amount,
-            status
-        FROM transactions
-        WHERE id=?
-        """,
-        (tid,)
-    )
+    cur.execute("""
+    SELECT
+        user_id,
+        amount,
+        status
+    FROM transactions
+    WHERE id=?
+    """, (txid,))
 
-    row = c.fetchone()
+    row = cur.fetchone()
 
     if not row:
 
         con.close()
         return
 
-    uid, amount, status = row
+    user_id, amount, status = row
 
     if status != "pending":
 
         con.close()
 
-        await q.edit_message_text(
+        await query.edit_message_text(
             "⚠️ Already processed."
         )
 
@@ -2408,25 +2236,22 @@ async def balance_action(update, context):
 
     if action == "reject_balance":
 
-        c.execute(
-            """
-            UPDATE transactions
-            SET status='rejected'
-            WHERE id=?
-            """,
-            (tid,)
-        )
+        cur.execute("""
+        UPDATE transactions
+        SET status='rejected'
+        WHERE id=?
+        """, (txid,))
 
         con.commit()
         con.close()
 
-        await q.edit_message_text(
-            f"❌ Balance #{tid} rejected."
+        await query.edit_message_text(
+            f"❌ Balance #{txid} rejected."
         )
 
         await context.bot.send_message(
-            uid,
-            f"""
+            chat_id=user_id,
+            text=f"""
 ❌ BALANCE REQUEST REJECTED
 
 💰 Amount:
@@ -2439,44 +2264,35 @@ async def balance_action(update, context):
 
         return
 
-    c.execute(
-        """
-        UPDATE transactions
-        SET status='accepted'
-        WHERE id=?
-        """,
-        (tid,)
-    )
+    cur.execute("""
+    UPDATE transactions
+    SET status='accepted'
+    WHERE id=?
+    """, (txid,))
 
-    c.execute(
-        """
-        UPDATE users
-        SET balance=balance+?
-        WHERE user_id=?
-        """,
-        (
-            amount,
-            uid
-        )
-    )
+    cur.execute("""
+    UPDATE users
+    SET balance=balance+?
+    WHERE user_id=?
+    """, (amount, user_id))
 
     con.commit()
     con.close()
 
-    await q.edit_message_text(
-        f"✅ Balance #{tid} accepted."
+    await query.edit_message_text(
+        f"✅ Balance #{txid} accepted."
     )
 
     await context.bot.send_message(
-        uid,
-        f"""
+        chat_id=user_id,
+        text=f"""
 🎉 BALANCE ADDED
 
 💰 Added:
 ৳{amount:.2f}
 
 💵 Current Balance:
-৳{get_balance(uid):.2f}
+৳{get_balance(user_id):.2f}
 """
     )
 
@@ -2487,11 +2303,10 @@ async def balance_action(update, context):
 
 async def support(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    await q.edit_message_text(
+    await query.edit_message_text(
         f"""
 🆘 — SUPPORT —
 
@@ -2517,11 +2332,10 @@ async def support(update, context):
 
 async def tutorials(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    await q.edit_message_text(
+    await query.edit_message_text(
         """
 📺 — VIDEO TUTORIALS —
 
@@ -2551,9 +2365,7 @@ Tutorial videos can be added later.
 
 async def admin(update, context):
 
-    if not is_admin(
-        update.effective_user.id
-    ):
+    if not is_admin(update.effective_user.id):
 
         await update.message.reply_text(
             "❌ Admin only."
@@ -2561,7 +2373,7 @@ async def admin(update, context):
 
         return
 
-    kb = [
+    keyboard = [
 
         [
             InlineKeyboardButton(
@@ -2642,7 +2454,7 @@ Welcome Admin.
 
 নিচের options থেকে কাজ নির্বাচন করুন:
 """,
-        reply_markup=InlineKeyboardMarkup(kb)
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
@@ -2652,33 +2464,28 @@ Welcome Admin.
 
 async def admin_callback(update, context):
 
-    q = update.callback_query
+    query = update.callback_query
+    await query.answer()
 
-    await q.answer()
-
-    if not is_admin(
-        q.from_user.id
-    ):
+    if not is_admin(query.from_user.id):
         return
 
-    d = q.data
+    data = query.data
 
-    if d.startswith(
-        "admin:add_credential:"
-    ):
+    if data.startswith("admin:add_credential:"):
 
-        dur = d.split(":")[2]
+        duration = data.split(":")[2]
 
-        context.user_data[
-            "admin_action"
-        ] = f"add_credential:{dur}"
+        context.user_data["admin_action"] = (
+            f"add_credential:{duration}"
+        )
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             f"""
 🔑 ADD USER/PASSWORD
 
 Duration:
-{dur} Day
+{duration} Day
 
 এই format-এ পাঠান:
 
@@ -2692,22 +2499,20 @@ SABBIR123 | pass123
 
         return
 
-    if d.startswith(
-        "admin:file:"
-    ):
+    if data.startswith("admin:file:"):
 
-        fk = d.split(":")[2]
+        file_key = data.split(":")[2]
 
-        context.user_data[
-            "admin_action"
-        ] = f"file:{fk}"
+        context.user_data["admin_action"] = (
+            f"file:{file_key}"
+        )
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             f"""
 📁 ADD FILE
 
 Product:
-{fk.upper()}
+{file_key.upper()}
 
 এখন Telegram document হিসেবে
 file পাঠান।
@@ -2716,50 +2521,38 @@ file পাঠান।
 
         return
 
-    if d == "admin:stats":
+    if data == "admin:stats":
 
         con = db()
-        c = con.cursor()
+        cur = con.cursor()
 
-        c.execute(
-            "SELECT COUNT(*) FROM users"
-        )
+        cur.execute("SELECT COUNT(*) FROM users")
+        users = cur.fetchone()[0]
 
-        users = c.fetchone()[0]
+        cur.execute("""
+        SELECT COUNT(*)
+        FROM credentials
+        WHERE sold=0
+        """)
+        credentials = cur.fetchone()[0]
 
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM credentials
-            WHERE sold=0
-            """
-        )
+        cur.execute("""
+        SELECT COUNT(*)
+        FROM orders
+        WHERE status='pending'
+        """)
+        pending_orders = cur.fetchone()[0]
 
-        creds = c.fetchone()[0]
-
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM orders
-            WHERE status='pending'
-            """
-        )
-
-        po = c.fetchone()[0]
-
-        c.execute(
-            """
-            SELECT COUNT(*)
-            FROM transactions
-            WHERE status='pending'
-            """
-        )
-
-        pb = c.fetchone()[0]
+        cur.execute("""
+        SELECT COUNT(*)
+        FROM transactions
+        WHERE status='pending'
+        """)
+        pending_balance = cur.fetchone()[0]
 
         con.close()
 
-        await q.message.reply_text(
+        await query.message.reply_text(
             f"""
 📊 — ADMIN STATS —
 
@@ -2767,44 +2560,36 @@ file পাঠান।
 {users}
 
 🔑 Available Accounts:
-{creds}
+{credentials}
 
 🧾 Pending Orders:
-{po}
+{pending_orders}
 
 💰 Pending Balance:
-{pb}
+{pending_balance}
 """
         )
 
 
 # =========================================================
-# ADMIN MESSAGE HANDLER
+# ADMIN MESSAGE
 # =========================================================
 
-async def admin_message_handler(
-    update,
-    context
-):
+async def admin_message_handler(update, context):
 
     if not update.message:
         return
 
-    if not is_admin(
-        update.effective_user.id
-    ):
+    if not is_admin(update.effective_user.id):
         return
 
-    action = context.user_data.get(
-        "admin_action"
-    )
+    action = context.user_data.get("admin_action")
 
     if not action:
         return
 
-    if action.startswith(
-        "file:"
-    ):
+    # FILE
+    if action.startswith("file:"):
 
         if not update.message.document:
 
@@ -2814,64 +2599,58 @@ async def admin_message_handler(
 
             return
 
-        fk = action.split(
-            ":",
-            1
-        )[1]
-
-        doc = update.message.document
+        file_key = action.split(":", 1)[1]
+        document = update.message.document
 
         con = db()
-        c = con.cursor()
+        cur = con.cursor()
 
-        c.execute(
-            """
-            INSERT OR REPLACE INTO files(
-                file_key,
-                telegram_file_id,
-                file_name,
-                updated_at
-            )
-            VALUES(?,?,?,?)
-            """,
-            (
-                fk,
-                doc.file_id,
-                doc.file_name or "file",
-                now_str()
-            )
+        cur.execute("""
+        INSERT OR REPLACE INTO files
+        (
+            file_key,
+            telegram_file_id,
+            file_name,
+            updated_at
         )
+        VALUES (?, ?, ?, ?)
+        """, (
+            file_key,
+            document.file_id,
+            document.file_name or "file",
+            now_str()
+        ))
 
         con.commit()
         con.close()
 
-        context.user_data.pop(
-            "admin_action",
-            None
-        )
+        context.user_data.pop("admin_action", None)
 
         await update.message.reply_text(
             f"""
 ✅ FILE SAVED
 
 📁 Product:
-{fk.upper()}
+{file_key.upper()}
 
 📄 File:
-{doc.file_name or 'file'}
+{document.file_name or 'file'}
 """
         )
 
         return
 
-    if action.startswith(
-        "add_credential:"
-    ):
+    # CREDENTIAL
+    if action.startswith("add_credential:"):
+
+        if not update.message.text:
+            return
+
+        duration = int(action.split(":")[1])
 
         parts = [
             x.strip()
-            for x in
-            (update.message.text or "").split("|")
+            for x in update.message.text.split("|")
         ]
 
         if len(parts) != 2:
@@ -2880,55 +2659,51 @@ async def admin_message_handler(
                 """
 ❌ Format ভুল।
 
+এইভাবে পাঠান:
+
 username | password
 """
             )
 
             return
 
-        dur = int(
-            action.split(":")[1]
-        )
+        username = parts[0]
+        password = parts[1]
 
         con = db()
-        c = con.cursor()
+        cur = con.cursor()
 
-        c.execute(
-            """
-            INSERT INTO credentials(
-                username,
-                password,
-                duration
-            )
-            VALUES(?,?,?)
-            """,
-            (
-                parts[0],
-                parts[1],
-                dur
-            )
+        cur.execute("""
+        INSERT INTO credentials
+        (
+            username,
+            password,
+            duration
         )
+        VALUES (?, ?, ?)
+        """, (
+            username,
+            password,
+            duration
+        ))
 
         con.commit()
         con.close()
 
-        context.user_data.pop(
-            "admin_action",
-            None
-        )
+        context.user_data.pop("admin_action", None)
 
         await update.message.reply_text(
             f"""
 ✅ ACCOUNT ADDED
 
 👤 Username:
-{parts[0]}
+{username}
 
 🔑 Password:
-{parts[1]}
+{password}
 
 ⏳ Duration:
-{dur} Day
+{duration} Day
 """
         )
 
@@ -2937,14 +2712,9 @@ username | password
 # DOCUMENT ROUTER
 # =========================================================
 
-async def document_router(
-    update,
-    context
-):
+async def document_router(update, context):
 
-    if is_admin(
-        update.effective_user.id
-    ):
+    if is_admin(update.effective_user.id):
 
         await admin_message_handler(
             update,
@@ -2953,49 +2723,23 @@ async def document_router(
 
 
 # =========================================================
-# HOME
+# TEXT HANDLER
 # =========================================================
 
-async def home(update, context):
+async def text_handler(update, context):
 
-    q = update.callback_query
-
-    await q.answer()
-
-    await q.edit_message_text(
-        welcome_text(
-            q.from_user.first_name
-        ),
-        reply_markup=main_menu()
-    )
-
-
-# =========================================================
-# NORMAL TEXT HANDLER
-# =========================================================
-
-async def text_handler(
-    update,
-    context
-):
-
-    if not update.message:
+    if not update.message or not update.message.text:
         return
 
-    if not update.message.text:
-        return
-
-    u = update.effective_user
-
+    user = update.effective_user
     text = update.message.text.strip()
 
-    ensure_user(u)
+    ensure_user(user)
 
-    if is_admin(u.id):
+    # Admin
+    if is_admin(user.id):
 
-        if context.user_data.get(
-            "admin_action"
-        ):
+        if context.user_data.get("admin_action"):
 
             await admin_message_handler(
                 update,
@@ -3004,29 +2748,20 @@ async def text_handler(
 
             return
 
-    if await handle_balance_amount(
-        update,
-        context
-    ):
-
+    # Custom balance
+    if await handle_balance_amount(update, context):
         return
 
-    if await balance_transaction(
-        update,
-        context
-    ):
-
+    # Balance transaction
+    if await balance_transaction(update, context):
         return
 
-    if context.user_data.get(
-        "waiting_tx"
-    ):
+    # Product transaction
+    if context.user_data.get("waiting_tx"):
 
-        context.user_data[
-            "waiting_tx"
-        ] = False
+        context.user_data["waiting_tx"] = False
 
-        key = context.user_data.get(
+        product_key = context.user_data.get(
             "selected_product"
         )
 
@@ -3034,7 +2769,7 @@ async def text_handler(
             "payment_method"
         )
 
-        if not key or not method:
+        if not product_key or not method:
 
             await update.message.reply_text(
                 "❌ Payment session expired.",
@@ -3043,9 +2778,9 @@ async def text_handler(
 
             return
 
-        p = PRODUCTS.get(key)
+        product = PRODUCTS.get(product_key)
 
-        if not p:
+        if not product:
 
             await update.message.reply_text(
                 "❌ Product পাওয়া যায়নি.",
@@ -3054,39 +2789,36 @@ async def text_handler(
 
             return
 
+        # Stock re-check
         con = db()
-        c = con.cursor()
+        cur = con.cursor()
 
-        if p["type"] == "credential":
+        available = False
 
-            c.execute(
-                """
-                SELECT COUNT(*)
-                FROM credentials
-                WHERE sold=0
-                AND duration=?
-                """,
-                (p["duration"],)
-            )
+        if product["type"] == "credential":
 
-            ok = c.fetchone()[0] > 0
+            cur.execute("""
+            SELECT COUNT(*)
+            FROM credentials
+            WHERE sold=0
+            AND duration=?
+            """, (product["duration"],))
+
+            if cur.fetchone()[0] > 0:
+                available = True
 
         else:
 
-            c.execute(
-                """
-                SELECT telegram_file_id
-                FROM files
-                WHERE file_key=?
-                """,
-                (p["file_key"],)
-            )
+            cur.execute("""
+            SELECT telegram_file_id
+            FROM files
+            WHERE file_key=?
+            """, (product["file_key"],))
 
-            ok = bool(
-                c.fetchone()
-            )
+            if cur.fetchone():
+                available = True
 
-        if not ok:
+        if not available:
 
             con.close()
 
@@ -3097,33 +2829,32 @@ async def text_handler(
 
             return
 
-        c.execute(
-            """
-            INSERT INTO orders(
-                user_id,
-                product_key,
-                product_name,
-                amount,
-                payment_method,
-                transaction_id,
-                status,
-                created_at
-            )
-            VALUES(?,?,?,?,?,?,?,?)
-            """,
-            (
-                u.id,
-                key,
-                p["name"],
-                p["price"],
-                method,
-                text,
-                "pending",
-                now_str()
-            )
+        # Create order
+        cur.execute("""
+        INSERT INTO orders
+        (
+            user_id,
+            product_key,
+            product_name,
+            amount,
+            payment_method,
+            transaction_id,
+            status,
+            created_at
         )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            user.id,
+            product_key,
+            product["name"],
+            product["price"],
+            method,
+            text,
+            "pending",
+            now_str()
+        ))
 
-        oid = c.lastrowid
+        order_id = cur.lastrowid
 
         con.commit()
         con.close()
@@ -3133,13 +2864,13 @@ async def text_handler(
 ✅ PAYMENT SUBMITTED
 
 🧾 Order:
-#{oid}
+#{order_id}
 
 📦 Product:
-{p['name']}
+{product['name']}
 
 💰 Amount:
-৳{p['price']}
+৳{product['price']}
 
 💳 Payment:
 {method}
@@ -3150,25 +2881,26 @@ PENDING
             reply_markup=main_menu()
         )
 
+        # Admin notification
         await context.bot.send_message(
-            ADMIN_ID,
-            f"""
+            chat_id=ADMIN_ID,
+            text=f"""
 🔔 NEW PAYMENT
 
 🧾 Order:
-#{oid}
+#{order_id}
 
 👤 User:
-{u.full_name}
+{user.full_name}
 
 🆔 ID:
-{u.id}
+{user.id}
 
 📦 Product:
-{p['name']}
+{product['name']}
 
 💰 Amount:
-৳{p['price']}
+৳{product['price']}
 
 💳 Method:
 {method}
@@ -3183,16 +2915,17 @@ PENDING
                 [
                     InlineKeyboardButton(
                         "✅ ACCEPT",
-                        callback_data=f"accept_order:{oid}"
+                        callback_data=f"accept_order:{order_id}"
                     ),
-
                     InlineKeyboardButton(
                         "❌ REJECT",
-                        callback_data=f"reject_order:{oid}"
+                        callback_data=f"reject_order:{order_id}"
                     )
                 ]
             ])
         )
+
+        return
 
 
 # =========================================================
@@ -3202,15 +2935,8 @@ PENDING
 def main():
 
     if not BOT_TOKEN:
-
         raise RuntimeError(
             "BOT_TOKEN environment variable missing."
-        )
-
-    if ADMIN_ID == 0:
-
-        raise RuntimeError(
-            "ADMIN_ID environment variable missing."
         )
 
     init_db()
@@ -3221,24 +2947,16 @@ def main():
         .build()
     )
 
-    # COMMANDS
-
+    # Commands
     app.add_handler(
-        CommandHandler(
-            "start",
-            start
-        )
+        CommandHandler("start", start)
     )
 
     app.add_handler(
-        CommandHandler(
-            "admin",
-            admin
-        )
+        CommandHandler("admin", admin)
     )
 
-    # VERIFY
-
+    # Verify
     app.add_handler(
         CallbackQueryHandler(
             verify_account,
@@ -3246,8 +2964,7 @@ def main():
         )
     )
 
-    # MAIN MENU
-
+    # Home / Main
     app.add_handler(
         CallbackQueryHandler(
             home,
@@ -3318,8 +3035,7 @@ def main():
         )
     )
 
-    # ADD BALANCE
-
+    # Add balance
     app.add_handler(
         CallbackQueryHandler(
             add_balance_menu,
@@ -3348,8 +3064,7 @@ def main():
         )
     )
 
-    # SABBIR MODE PRO PRICE LIST
-
+    # SABBIR MODE PRO
     app.add_handler(
         CallbackQueryHandler(
             sabbir_pro_menu,
@@ -3357,8 +3072,7 @@ def main():
         )
     )
 
-    # PRODUCTS
-
+    # Products
     app.add_handler(
         CallbackQueryHandler(
             product_select,
@@ -3380,8 +3094,7 @@ def main():
         )
     )
 
-    # DOWNLOAD
-
+    # Downloads
     app.add_handler(
         CallbackQueryHandler(
             download_file,
@@ -3389,8 +3102,7 @@ def main():
         )
     )
 
-    # ORDER ACTION
-
+    # Orders
     app.add_handler(
         CallbackQueryHandler(
             order_action,
@@ -3398,8 +3110,7 @@ def main():
         )
     )
 
-    # BALANCE ACTION
-
+    # Balance action
     app.add_handler(
         CallbackQueryHandler(
             balance_action,
@@ -3407,8 +3118,7 @@ def main():
         )
     )
 
-    # ADMIN CALLBACK
-
+    # Admin
     app.add_handler(
         CallbackQueryHandler(
             admin_callback,
@@ -3416,8 +3126,7 @@ def main():
         )
     )
 
-    # ADMIN DOCUMENT
-
+    # Documents
     app.add_handler(
         MessageHandler(
             filters.Document.ALL,
@@ -3425,8 +3134,7 @@ def main():
         )
     )
 
-    # NORMAL TEXT
-
+    # Text
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -3434,9 +3142,7 @@ def main():
         )
     )
 
-    print(
-        "SABBIR MODS SHOP BOT STARTED"
-    )
+    print("SABBIR MODZ SHOP BOT STARTED")
 
     app.run_polling(
         drop_pending_updates=True
