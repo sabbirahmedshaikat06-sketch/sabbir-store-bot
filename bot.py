@@ -444,7 +444,7 @@ def main_menu():
 
         [
             InlineKeyboardButton(
-                "📦 My Orders",
+                "📦 My Orders.",
                 callback_data="orders"
             ),
             InlineKeyboardButton(
